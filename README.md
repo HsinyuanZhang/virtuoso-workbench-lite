@@ -7,8 +7,25 @@ request. The agent claims it, sends a plan, waits for approval, and uses
 separately authorized OA edits, parameter tuning, and simulation.
 
 The backend tracks design requests, approval, and results. It does **not** apply
-edits or launch simulation. Part A leaves the viewer unchanged. Its old Save
-handoff button does not work until Part B. Use the CLI or HTTP API for requests.
+edits or launch simulation. Use the browser to build requests, review agent plans,
+and accept results. Agents use the local CLI for claims, plans, and results.
+
+## Browser workflow
+
+Select two instance terminals and click **Add connect**. Add parameter name/value
+rows in the instance inspector and click **Add parameters**. Repeated parameter
+edits update that instance's draft change. Remove unwanted changes from the list.
+Enter a title, simulation setup, acceptance targets, and an optional note. Click
+**Save draft** or **Submit**. The builder uses the loaded snapshot revision.
+A stale revision error keeps the local draft. Opening a schematic clears it.
+
+Select a request in the Requests panel. The panel polls every five seconds without
+overlapping polls. Review changes, plans, results, metrics, and history. Use the
+available action buttons and add a review comment. Executing requests cannot be
+cancelled by the human. Request highlights appear only on the matching schematic.
+
+The UI uses a black background, green devices, blue wires, red pins, and white text
+and selection. Errors are red. Success and met targets are green. Status uses text.
 
 ## Architecture
 

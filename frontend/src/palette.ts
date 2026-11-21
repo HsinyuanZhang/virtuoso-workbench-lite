@@ -1,0 +1,7 @@
+export const palette = {
+  black: "#000000",
+  white: "#ffffff",
+  red: "#ff0000",
+  blue: "#0000ff",
+  green: "#00ff00",
+} as const;

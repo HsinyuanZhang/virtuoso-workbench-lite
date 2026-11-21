@@ -25,6 +25,11 @@
           <button id="open-demo" type="button">Demo</button>
         </div>
       </form>
+      <section class="section" aria-label="Requests">
+        <h2>Requests</h2>
+        <p id="request-poll-status" role="status">Loading requests…</p>
+        <ul id="request-list" class="request-list"></ul>
+      </section>
       <section class="section nets">
         <h2>Nets <span id="net-count"></span></h2>
         <input id="net-search" type="search" placeholder="Find a net" aria-label="Find a net">
@@ -47,6 +52,7 @@
         <span id="statistics"></span>
         <span>Drag to pan · Scroll to zoom</span>
       </footer>
+      <section id="request-details" class="section request-details" aria-label="Selected request" hidden></section>
     </section>
     <aside class="right panel" aria-label="Schematic inspector">
       <section class="section">
@@ -55,6 +61,13 @@
         <select id="instances"></select>
         <p class="master" id="master"></p>
         <ul id="terminal-list" class="terminal-list"></ul>
+        <h2 class="subheading">Device parameters</h2>
+        <p>Propose new values. This does not edit OA.</p>
+        <div id="parameter-rows"></div>
+        <div class="actions">
+          <button id="parameter-row" type="button">Add row</button>
+          <button id="parameter-apply" type="button">Add parameters</button>
+        </div>
       </section>
       <section class="section">
         <h2>Topology</h2>
@@ -63,19 +76,27 @@
         <ul id="checks" class="check-list"></ul>
       </section>
       <section class="section review">
-        <h2>Wire handoff</h2>
+        <h2>Draft builder</h2>
+        <p>Changes stay local until you save or submit. Opening a schematic clears this builder.</p>
         <p id="wire-status">Select two instance terminals to draft a wire.</p>
         <ol id="endpoints"></ol>
         <p id="wire-effect"></p>
-        <label for="note">Note for the agent</label>
-        <textarea id="note" rows="2" maxlength="500" placeholder="Optional design intent"></textarea>
         <div class="actions">
-          <button id="save" class="primary" type="button" disabled>Save handoff</button>
+          <button id="add-connect" type="button" disabled>Add connect</button>
           <button id="clear" type="button" disabled>Clear</button>
         </div>
-        <div id="receipt" hidden>
-          <p id="receipt-path"></p>
-          <button id="copy" type="button">Copy agent request</button>
+        <ol id="draft-changes" class="change-list"></ol>
+        <label for="title">Title</label>
+        <input id="title" maxlength="120" required>
+        <label for="simulation">Simulation setup</label>
+        <textarea id="simulation" rows="2" maxlength="4000" placeholder="Describe the simulation in words"></textarea>
+        <label for="acceptance">Acceptance targets</label>
+        <textarea id="acceptance" rows="2" maxlength="4000" placeholder="Describe the required result"></textarea>
+        <label for="note">Note for the agent</label>
+        <textarea id="note" rows="2" maxlength="2000"></textarea>
+        <div class="actions">
+          <button id="save" type="button" disabled>Save draft</button>
+          <button id="submit-draft" class="primary" type="button" disabled>Submit</button>
         </div>
       </section>
     </aside>
