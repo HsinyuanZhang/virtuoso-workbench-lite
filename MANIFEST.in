@@ -1,0 +1,6 @@
+include AGENTS.md CHANGELOG.md CONTRIBUTING.md workbench.py .nvmrc
+include frontend/*.json frontend/*.js frontend/*.ts frontend/index.html
+recursive-include frontend/src *.ts *.css
+recursive-include frontend/tests *.ts
+recursive-include scripts *.py
+recursive-include tests *.py

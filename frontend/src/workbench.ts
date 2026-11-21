@@ -1,7 +1,28 @@
-const element = (id) => document.getElementById(id);
+import "./workbench.css";
+import { buildScene, collectNets, countLabel, segmentDistance } from "./logic";
+import type { Point, Port, Snapshot, State, Receipt, Hit } from "./types";
+
+interface Elements {
+  schematic: HTMLCanvasElement;
+  "net-search": HTMLInputElement;
+  library: HTMLInputElement;
+  cell: HTMLInputElement;
+  instances: HTMLSelectElement;
+  note: HTMLTextAreaElement;
+  "open-form": HTMLFormElement;
+  save: HTMLButtonElement;
+  clear: HTMLButtonElement;
+  "open-cell": HTMLButtonElement;
+  "open-demo": HTMLButtonElement;
+}
+function element<K extends keyof Elements>(id: K): Elements[K];
+function element(id: string): HTMLElement;
+function element(id: string): HTMLElement {
+  return document.getElementById(id)!;
+}
 const canvas = element("schematic");
-const context = canvas.getContext("2d");
-const state = {
+const context = canvas.getContext("2d")!;
+const state: State = {
   snapshot: null,
   scene: null,
   nets: new Map(),
@@ -23,18 +44,14 @@ const colors = {
   muted: "#a1b7aa",
 };
 
-function item(tag, text, className) {
+function item<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.textContent = text;
   if (className) node.className = className;
   return node;
 }
 
-function countLabel(count, singular) {
-  return `${count} ${singular}${count === 1 ? "" : "s"}`;
-}
-
-function listButton(name, detail, active, click) {
+function listButton(name: string, detail: string, active: boolean, click: () => void): HTMLLIElement {
   const entry = item("li", "");
   const button = item("button", "");
   button.type = "button";
@@ -45,102 +62,18 @@ function listButton(name, detail, active, click) {
   return entry;
 }
 
-function message(text, error = false) {
+function message(text: string, error = false): void {
   const status = element("status");
   status.hidden = !text;
   status.textContent = text;
   status.classList.toggle("error", error);
 }
 
-async function api(path, options) {
+async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options);
-  const data = await response.json();
+  const data = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(data.error);
   return data;
-}
-
-function bounds(coordinates) {
-  const extent = { left: Infinity, right: -Infinity, top: -Infinity, bottom: Infinity };
-  for (const [x, y] of coordinates) {
-    extent.left = Math.min(extent.left, x);
-    extent.right = Math.max(extent.right, x);
-    extent.top = Math.max(extent.top, y);
-    extent.bottom = Math.min(extent.bottom, y);
-  }
-  return extent;
-}
-
-function buildScene(snapshot) {
-  const devices = [];
-  const extentPoints = [
-    ...snapshot.wires.flatMap((wire) => wire.points),
-    ...snapshot.pins.map((pin) => pin.xy).filter(Boolean),
-  ];
-  const widths = snapshot.instances
-    .filter((instance) => instance.bbox.length === 2)
-    .map((instance) => instance.bbox[1][0] - instance.bbox[0][0])
-    .filter((width) => width > 0).sort((a, b) => a - b);
-  const unit = widths[Math.floor(widths.length / 2)] ?? 1;
-  let fallbackCount = 0;
-  for (const instance of snapshot.instances) {
-    const measured = instance.terminals.map((terminal) => terminal.xy).filter(Boolean);
-    const area = bounds(measured.length ? measured : instance.bbox);
-    const hasBounds = Number.isFinite(area.left);
-    const [x, y] = hasBounds
-      ? [(area.left + area.right) / 2, (area.top + area.bottom) / 2]
-      : (instance.xy ?? [fallbackCount++ * unit * 2, 0]);
-    const nativeWidth = hasBounds ? area.right - area.left : 0;
-    const nativeHeight = hasBounds ? area.top - area.bottom : 0;
-    const halfWidth = Math.max(unit * 0.26, nativeWidth * 0.40);
-    const halfHeight = Math.max(unit * 0.14, nativeHeight * 0.40, instance.terminals.length * unit * 0.035);
-    const groups = { left: [], right: [], top: [], bottom: [] };
-    for (const terminal of instance.terminals) {
-      let side = "right";
-      if (terminal.xy) {
-        const dx = terminal.xy[0] - x;
-        const dy = terminal.xy[1] - y;
-        if (Math.abs(dx) / halfWidth > Math.abs(dy) / halfHeight) {
-          side = dx < 0 ? "left" : "right";
-        } else {
-          side = dy < 0 ? "bottom" : "top";
-        }
-      }
-      groups[side].push(terminal);
-    }
-    const ports = [];
-    for (const [side, terminals] of Object.entries(groups)) {
-      const vertical = side === "left" || side === "right";
-      const axis = vertical ? 1 : 0;
-      terminals.sort((a, b) => (a.xy?.[axis] ?? 0) - (b.xy?.[axis] ?? 0));
-      terminals.forEach((terminal, index) => {
-        const offset = ((2 * index + 1) / terminals.length - 1) * 0.88;
-        const position = vertical
-          ? [x + halfWidth * (side === "left" ? -1 : 1), y + halfHeight * offset]
-          : [x + halfWidth * offset, y + halfHeight * (side === "top" ? 1 : -1)];
-        ports.push({ ...terminal, instance: instance.name, side, position });
-      });
-    }
-    devices.push({ instance, x, y, halfWidth, halfHeight, ports });
-    extentPoints.push([x - halfWidth, y - halfHeight], [x + halfWidth, y + halfHeight]);
-  }
-  return { devices, area: bounds(extentPoints.length ? extentPoints : [[-1, -1], [1, 1]]) };
-}
-
-function collectNets(snapshot) {
-  const nets = new Map();
-  function add(name, group, value) {
-    if (!name) return;
-    if (!nets.has(name)) nets.set(name, { terminals: [], pins: [], segments: 0 });
-    const entry = nets.get(name);
-    if (group === "segments") entry.segments += 1;
-    else entry[group].push(value);
-  }
-  for (const instance of snapshot.instances) {
-    for (const terminal of instance.terminals) add(terminal.net, "terminals", `${instance.name}.${terminal.name}`);
-  }
-  for (const pin of snapshot.pins) add(pin.net, "pins", pin.name);
-  for (const wire of snapshot.wires) add(wire.net, "segments", null);
-  return new Map([...nets].sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })));
 }
 
 function fit() {
@@ -156,11 +89,11 @@ function fit() {
   draw();
 }
 
-function screen([x, y]) {
+function screen([x, y]: Point): Point {
   return [state.view.x + x * state.view.scale, state.view.y - y * state.view.scale];
 }
 
-function zoom(multiplier, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
+function zoom(multiplier: number, x = canvas.clientWidth / 2, y = canvas.clientHeight / 2) {
   if (!state.scene) return;
   const before = state.view.scale;
   const after = Math.max(0.001, Math.min(100000, before * multiplier));
@@ -168,7 +101,7 @@ function zoom(multiplier, x = canvas.clientWidth / 2, y = canvas.clientHeight / 
   draw();
 }
 
-function line(path, color, width = 1, dash = []) {
+function line(path: Point[], color: string, width = 1, dash: number[] = []) {
   context.strokeStyle = color;
   context.lineWidth = width;
   context.setLineDash(dash);
@@ -178,7 +111,7 @@ function line(path, color, width = 1, dash = []) {
   context.setLineDash([]);
 }
 
-function circle(x, y, radius, fill, stroke = null) {
+function circle(x: number, y: number, radius: number, fill: string, stroke: string | null = null) {
   context.beginPath();
   context.arc(x, y, radius, 0, 2 * Math.PI);
   context.fillStyle = fill;
@@ -190,7 +123,7 @@ function circle(x, y, radius, fill, stroke = null) {
   }
 }
 
-function text(textValue, x, y, color, align = "left", pixels = 11, background = false) {
+function text(textValue: string, x: number, y: number, color: string, align: CanvasTextAlign = "left", pixels = 11, background = false) {
   context.font = `${pixels}px monospace`;
   context.textAlign = align;
   context.textBaseline = "middle";
@@ -204,7 +137,7 @@ function text(textValue, x, y, color, align = "left", pixels = 11, background = 
   context.fillText(textValue, x, y);
 }
 
-function isEndpoint(port) {
+function isEndpoint(port: Port) {
   return state.endpoints.some((end) => end.instance === port.instance && end.name === port.name);
 }
 
@@ -223,9 +156,9 @@ function draw() {
   for (let x = (state.view.x % step + step) % step; x < width; x += step) {
     for (let y = (state.view.y % step + step) % step; y < height; y += step) context.fillRect(x, y, 1, 1);
   }
-  if (!state.scene) return;
+  if (!state.scene || !state.snapshot) return;
   state.hits = [];
-  const wireHits = [];
+  const wireHits: Hit[] = [];
   for (const wire of state.snapshot.wires) {
     const path = wire.points.map(screen);
     const highlighted = wire.net === state.net;
@@ -299,10 +232,11 @@ function renderNets() {
     name, String(net.terminals.length + net.pins.length), state.net === name,
     () => selectNet(state.net === name ? null : name),
   )));
-  element("net-count").textContent = state.nets.size;
+  element("net-count").textContent = String(state.nets.size);
 }
 
 function renderInspector() {
+  if (!state.scene) return;
   const device = state.scene.devices.find((entry) => entry.instance.name === state.instance);
   const terminalList = element("terminal-list");
   element("master").textContent = device ? `${device.instance.library}/${device.instance.master} · ${device.instance.orientation}` : "";
@@ -313,6 +247,7 @@ function renderInspector() {
 }
 
 function renderTopology() {
+  if (!state.snapshot) return;
   const open = [];
   const sameNet = [];
   for (const instance of state.snapshot.instances) {
@@ -325,10 +260,10 @@ function renderTopology() {
       if (!terminal.net) open.push(`${instance.name}.${terminal.name}`);
     }
   }
-  const net = state.nets.get(state.net);
+  const net = state.nets.get(state.net ?? "");
   const details = element("net-details");
   details.replaceChildren();
-  element("topology-overview").textContent = state.net
+  element("topology-overview").textContent = state.net && net
     ? `${state.net} · ${countLabel(net.terminals.length, "instance terminal")} · ${countLabel(net.segments, "wire segment")}`
     : countLabel(open.length, "open instance terminal");
   if (net) {
@@ -367,14 +302,14 @@ function renderHandoff() {
   if (state.receipt) element("receipt-path").textContent = state.receipt.path;
 }
 
-function selectNet(name) {
+function selectNet(name: string | null) {
   state.net = name;
   renderNets();
   renderTopology();
   draw();
 }
 
-function chooseTerminal(port) {
+function chooseTerminal(port: Port) {
   state.receipt = null;
   if (isEndpoint(port)) state.endpoints = state.endpoints.filter((end) => end.instance !== port.instance || end.name !== port.name);
   else if (state.endpoints.length === 2) state.endpoints = [port];
@@ -386,13 +321,13 @@ function chooseTerminal(port) {
   message("");
 }
 
-async function open(path) {
+async function open(path: string) {
   const request = ++state.request;
   element("open-cell").disabled = true;
   element("open-demo").disabled = true;
   message("Opening schematic…");
   try {
-    const snapshot = await api(path);
+    const snapshot = await api<Snapshot>(path);
     if (request !== state.request) return;
     state.snapshot = snapshot;
     state.scene = buildScene(snapshot);
@@ -422,7 +357,7 @@ async function open(path) {
     fit();
     message("");
   } catch (error) {
-    if (request === state.request) message(error.message, true);
+    if (request === state.request) message(error instanceof Error ? error.message : String(error), true);
   } finally {
     if (request === state.request) {
       element("open-cell").disabled = false;
@@ -433,13 +368,13 @@ async function open(path) {
 
 element("open-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const fields = new FormData(event.currentTarget);
-  open(`/api/schematic?${new URLSearchParams(fields)}`);
+  const fields = new FormData(element("open-form"));
+  open(`/api/schematic?${new URLSearchParams([...fields].map(([key, value]) => [key, String(value)]))}`);
 });
 element("open-demo").addEventListener("click", () => open("/api/demo"));
 element("net-search").addEventListener("input", renderNets);
-element("instances").addEventListener("change", (event) => {
-  state.instance = event.target.value;
+element("instances").addEventListener("change", () => {
+  state.instance = element("instances").value;
   renderInspector();
   draw();
 });
@@ -457,6 +392,7 @@ element("note").addEventListener("input", () => {
   }
 });
 element("save").addEventListener("click", async () => {
+  if (!state.snapshot) return;
   const request = state.request;
   const endpoints = [...state.endpoints];
   const note = element("note").value;
@@ -464,7 +400,7 @@ element("save").addEventListener("click", async () => {
   renderHandoff();
   try {
     const { source, library, cell, revision } = state.snapshot;
-    const receipt = await api("/api/handoffs", {
+    const receipt = await api<Receipt>("/api/handoffs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -478,7 +414,7 @@ element("save").addEventListener("click", async () => {
       message("Handoff saved on the server.");
     }
   } catch (error) {
-    if (request === state.request) message(error.message, true);
+    if (request === state.request) message(error instanceof Error ? error.message : String(error), true);
   } finally {
     delete element("save").dataset.busy;
     renderHandoff();
@@ -496,15 +432,8 @@ element("copy").addEventListener("click", async () => {
   }
 });
 
-function segmentDistance(x, y, [x1, y1], [x2, y2]) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const ratio = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / ((dx * dx + dy * dy) || 1)));
-  return Math.hypot(x - x1 - ratio * dx, y - y1 - ratio * dy);
-}
-
-function hitTest(x, y) {
-  let nearest = null;
+function hitTest(x: number, y: number): Hit | undefined {
+  let nearest: Hit | undefined;
   let distance = 12;
   for (const hit of state.hits) {
     if (hit.kind !== "terminal" && hit.kind !== "pin") continue;
