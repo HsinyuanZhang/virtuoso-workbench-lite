@@ -88,6 +88,17 @@ def test_every_human_transition(store, request_payload, action, state):
         assert store.read(identifier) == before
     else:
         result = store.human(identifier, action, "Human review")
+        assert (
+            result["status"]
+            == {
+                "submit": "submitted",
+                "cancel": "cancelled",
+                "approve": "approved",
+                "revise": "claimed",
+                "reject": "rejected",
+                "accept": "completed",
+            }[action]
+        )
         assert len(result["history"]) == len(before["history"]) + 1
         assert result["history"][-1]["from"] == state
         assert result["history"][-1]["to"] == result["status"]
@@ -109,6 +120,17 @@ def test_every_agent_transition(store, request_payload, action, state):
         assert store.read(identifier) == before
     else:
         result = store.agent(identifier, action, "worker", token, payload)
+        assert (
+            result["status"]
+            == {
+                "release": "submitted",
+                "plan": "planned",
+                "start": "executing",
+                "result": "result-pending",
+                "fail": "failed",
+                "heartbeat": state,
+            }[action]
+        )
         assert len(result["history"]) == len(before["history"]) + 1
         assert result["history"][-1]["event"] == action
         assert not result["claim"] or "token" not in result["claim"]
