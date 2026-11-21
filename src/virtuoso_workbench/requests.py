@@ -107,13 +107,27 @@ def validate_changes(
     snapshot: dict[str, Any],
     master_reader: Optional[Callable[[dict[str, Any]], list[str]]] = None,
 ) -> list[dict[str, Any]]:
+    return apply_changes(changes, snapshot, master_reader)[0]
+
+
+def apply_changes(
+    changes: Any,
+    snapshot: dict[str, Any],
+    master_reader: Optional[Callable[[dict[str, Any]], list[str]]] = None,
+    *,
+    preview: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     working = copy.deepcopy(snapshot)
     validated = []
-    for raw in items(changes, 200, 1):
+    unknown: set[str] = set()
+    for raw in items(changes, 200, 0 if preview else 1):
         if not isinstance(raw, dict):
             raise RequestError("Each change must be an object.")
         change = copy.deepcopy(raw)
         operation = change.get("op")
+        if preview and operation == "connect":
+            for field in ("outcome", "affected_nets", "affected_top_level_pins"):
+                change.pop(field, None)
         instances = {instance["name"]: instance for instance in working["instances"]}
 
         def instance(key: str) -> dict[str, Any]:
@@ -127,6 +141,10 @@ def validate_changes(
             for candidate in selected["terminals"]:
                 if candidate["name"] == terminal_name:
                     return candidate
+            if preview and selected["name"] in unknown:
+                candidate = {"name": terminal_name, "net": None, "xy": None}
+                selected["terminals"].append(candidate)
+                return candidate
             raise RequestError("The terminal does not exist on the instance.")
 
         if operation == "connect":
@@ -136,6 +154,11 @@ def validate_changes(
                 obj(endpoint, ("instance", "terminal"))
                 name(endpoint["instance"])
                 name(endpoint["terminal"])
+                if preview:
+                    selected = instances.get(endpoint["instance"])
+                    if selected is None:
+                        raise RequestError("The instance does not exist at this point in the request.")
+                    terminal(selected, endpoint["terminal"])
             if "net" in change:
                 name(change["net"])
             reviewed = review_wire(working, endpoints)
@@ -194,8 +217,10 @@ def validate_changes(
                 ),
                 None,
             )
-            terminals = [entry["name"] for entry in matching["terminals"]] if matching else []
-            if not matching and master_reader:
+            terminals = [entry["name"] for entry in matching["terminals"]] if matching and not preview else []
+            if preview:
+                unknown.add(change["name"])
+            if not matching and master_reader and not preview:
                 terminals = master_reader(change)
             working["instances"].append(
                 {
@@ -208,6 +233,7 @@ def validate_changes(
         elif operation == "remove-instance":
             obj(change, ("op", "name"))
             working["instances"].remove(instance("name"))
+            unknown.discard(change["name"])
         elif operation == "set-parameters":
             obj(change, ("op", "instance", "parameters"))
             instance("instance")
@@ -224,7 +250,7 @@ def validate_changes(
         else:
             raise RequestError("Unknown change operation.")
         validated.append(change)
-    return validated
+    return validated, working
 
 
 def validate_plan(payload: Any, actor: str, now: float) -> dict[str, Any]:

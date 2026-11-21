@@ -46,6 +46,11 @@ under `.artifacts`. Set `VWB_SCREENSHOT_DIR` to save the draft and approval
 screenshots in another existing directory. The palette test scans all source CSS
 and TypeScript. Keep color literals in the CSS custom properties and `palette.ts`.
 
+Connectivity checks run only in Python. The browser sends logical preview requests
+to the backend. Keep snapshot annotations out of revision hashes. Use the synthetic
+`problem_snapshot` fixture and geometry tests for new rules. Document tolerance
+changes in `docs/connectivity-checks.md`. Findings must not disable Submit.
+
 This project uses MIT licensing. Submit only code and fixtures you may publish,
 and retain required third-party notices. Report suspected secrets privately
 to the maintainer, not in a public issue.

@@ -2,6 +2,13 @@
 
 ## 0.1.0 — Unreleased
 
+### Step 2, Part C
+
+- Add original MIT advisory connectivity checks in Python and logical previews.
+- Include findings in snapshots and expose same-origin `POST /api/check`.
+- Add JSON `vwb check`, request-file previews, and agent safety instructions.
+- Add debounced browser checks, finding highlights, and synthetic geometry tests.
+
 ### Step 2, Part B
 
 - Replace browser wire handoffs with a request draft builder and parameter editor.

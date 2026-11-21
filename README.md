@@ -27,6 +27,22 @@ cancelled by the human. Request highlights appear only on the matching schematic
 The UI uses a black background, green devices, blue wires, red pins, and white text
 and selection. Errors are red. Success and met targets are green. Status uses text.
 
+## Advisory connectivity checks
+
+Use the **Checks** panel to inspect the current snapshot and the logical draft
+preview. Click a finding to highlight it. Draft edits update checks after a short
+debounce. Errors are red. Warnings are white. Findings never block Submit.
+
+```bash
+vwb check --source demo
+vwb check --source demo --file request.json
+```
+
+Snapshot responses include `checks`. `POST /api/check` checks ordered logical
+changes without writing state or editing OA. The demo retains one floating body
+terminal, `MN3.B`. See [checks and tolerance](docs/connectivity-checks.md) for the
+rules, geometry limits, API, and preview behavior. This is not a full ERC or LVS.
+
 ## Architecture
 
 - Python 3.9+ standard-library HTTP server, packaged as `virtuoso_workbench`.

@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from .checks import check_preview, connectivity_checks
+
 if TYPE_CHECKING:
     from .requests import RequestStore
 
@@ -332,9 +334,9 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot = self.server.read_live(query.get("library", [""])[0], query.get("cell", [""])[0])
             else:
                 raise WorkbenchError("Page not found.", HTTPStatus.NOT_FOUND)
-            return self.send_json({**snapshot, "revision": revision(snapshot)})
+            return self.send_json({**snapshot, "revision": revision(snapshot), "checks": connectivity_checks(snapshot)})
         action = re.fullmatch(r"/api/requests/([^/]+)/(submit|cancel|approve|revise|reject|accept)", target.path)
-        if target.path != "/api/requests" and not action:
+        if target.path not in ("/api/requests", "/api/check") and not action:
             raise WorkbenchError("Page not found.", HTTPStatus.NOT_FOUND)
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -346,6 +348,17 @@ class Handler(BaseHTTPRequestHandler):
             raise WorkbenchError("Send a JSON request.")
         payload = json.loads(self.rfile.read(length)) if length else {}
         store = self.server.request_store()
+        if target.path == "/api/check":
+            from .requests import RequestError, name, obj
+
+            obj(payload, ("target", "revision", "changes"))
+            checked_target = obj(payload["target"], ("source", "library", "cell", "view"))
+            if checked_target["source"] not in ("demo", "virtuoso"):
+                raise RequestError("Unknown schematic source.")
+            if checked_target["source"] == "virtuoso":
+                for field in ("library", "cell", "view"):
+                    name(checked_target[field])
+            return self.send_json(check_preview(payload, store.snapshot_reader(checked_target)))
         if action:
             from .requests import obj
 

@@ -87,6 +87,27 @@ A connect change stores its review outcome and affected nets.
 If a new connection has no net name, the tool assigns an unused vwb_net_N name.
 Simulation setup and acceptance targets remain natural-language text.
 
+Check current connectivity before you write the plan.
+Check the logical request preview too.
+
+```bash
+vwb check --source demo
+vwb check --source demo --file request.json
+vwb check --source virtuoso --library scratch --cell amplifier --bridge-docker eda-container --file request.json
+```
+
+Use a stored request file or a request create file.
+A show response file is also accepted.
+The file target and revision must match the current snapshot.
+Use --file - to read standard input.
+Read every finding.
+Explain relevant findings in the plan risks.
+Findings are advisory.
+They do not block submission or approval.
+An error finding does not change the successful exit code.
+The preview changes logical net membership.
+It does not add routes or infer master terminals.
+
 4. Send a plan.
 Use a JSON file with summary and steps.
 Use risks for optional risk text.
@@ -141,6 +162,16 @@ Send heartbeats during long simulations.
 Stop safely if a heartbeat fails.
 Do not assume that a human cancellation can stop a running tool.
 Human cancellation is forbidden during execution.
+
+Run the checks again after execution.
+Do not apply the old request file to the edited snapshot.
+
+```bash
+vwb check --source virtuoso --library scratch --cell amplifier --bridge-docker eda-container
+```
+
+Report remaining findings in the result summary.
+The checks do not replace simulation or a full electrical rule check.
 
 9. Send a result.
 The outcome is met, not-met, partial, or error.

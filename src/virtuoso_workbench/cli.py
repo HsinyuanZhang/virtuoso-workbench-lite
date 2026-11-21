@@ -13,7 +13,8 @@ from threading import Lock
 from typing import Any, Callable, NoReturn
 
 from . import server as app
-from .requests import AGENT, HUMAN, RequestError, RequestStore, obj, os_user, text
+from .checks import check_preview, connectivity_checks
+from .requests import AGENT, HUMAN, SCHEMA, RequestError, RequestStore, obj, os_user, text
 
 
 def emit(value: dict[str, Any]) -> None:
@@ -45,10 +46,13 @@ def parser() -> Parser:
     root = Parser(description=__doc__, parents=[common])
     commands = root.add_subparsers(dest="command")
     commands.add_parser("serve", parents=[common])
-    snapshot = commands.add_parser("snapshot", parents=[common])
-    snapshot.add_argument("--source", choices=("demo", "virtuoso"), default="demo")
-    snapshot.add_argument("--library")
-    snapshot.add_argument("--cell")
+    for action in ("snapshot", "check"):
+        snapshot = commands.add_parser(action, parents=[common])
+        snapshot.add_argument("--source", choices=("demo", "virtuoso"), default="demo")
+        snapshot.add_argument("--library")
+        snapshot.add_argument("--cell")
+        if action == "check":
+            snapshot.add_argument("--file")
     for entity in ("request", "agent"):
         group = commands.add_parser(entity, parents=[common])
         actions = group.add_subparsers(dest="action", required=True)
@@ -195,11 +199,44 @@ def execute(arguments: argparse.Namespace, parse: Parser) -> None:
             emit({"ok": True, "url": f"http://127.0.0.1:{server.server_port}"})
             sys.stdout.flush()
             server.serve_forever()
-    elif arguments.command == "snapshot":
+    elif arguments.command in ("snapshot", "check"):
         if arguments.source == "virtuoso" and (not arguments.library or not arguments.cell):
             parse.error("Live snapshots need --library and --cell.")
         snapshot = demo if arguments.source == "demo" else read_live(arguments.library, arguments.cell)
-        emit({"ok": True, "snapshot": {**snapshot, "revision": app.revision(snapshot)}})
+        if arguments.command == "snapshot":
+            emit(
+                {
+                    "ok": True,
+                    "snapshot": {
+                        **snapshot,
+                        "revision": app.revision(snapshot),
+                        "checks": connectivity_checks(snapshot),
+                    },
+                }
+            )
+        else:
+            check_payload: dict[str, Any] = {
+                "target": {key: snapshot[key] for key in ("source", "library", "cell", "view")},
+                "revision": app.revision(snapshot),
+                "changes": [],
+            }
+            if arguments.file:
+                data = read_file(arguments.file)
+                if isinstance(data, dict) and data.get("ok") is True and "request" in data:
+                    data = data["request"]
+                if not isinstance(data, dict):
+                    raise RequestError("Check input must be a request object.")
+                if "schema" in data and data["schema"] != SCHEMA:
+                    raise RequestError("Unsupported request schema.")
+                try:
+                    check_payload = {
+                        "target": data["target"],
+                        "revision": data["base_revision"] if "base_revision" in data else data["revision"],
+                        "changes": data["changes"],
+                    }
+                except KeyError:
+                    raise RequestError("Check input needs target, revision, and changes.") from None
+            emit(check_preview(check_payload, snapshot))
     elif arguments.action == "list":
         emit({"ok": True, "requests": store.list()})
     elif arguments.action == "show":
