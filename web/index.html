@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Circuit Workbench</title>
+  <link rel="stylesheet" href="/workbench.css">
+  <script type="module" src="/workbench.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="mark" aria-hidden="true">⏐</span>Circuit Workbench</a>
+    <span id="source" class="source"><i></i> Demo</span>
+  </header>
+  <main class="workspace">
+    <aside class="left panel" aria-label="Schematic navigation">
+      <form id="open-form" class="section">
+        <h2>Open schematic</h2>
+        <label for="library">Library</label>
+        <input id="library" name="library" type="text" autocomplete="off" spellcheck="false" required>
+        <label for="cell">Cell</label>
+        <input id="cell" name="cell" type="text" autocomplete="off" spellcheck="false" required>
+        <div class="actions">
+          <button id="open-cell" class="primary" type="submit">Open cell</button>
+          <button id="open-demo" type="button">Demo</button>
+        </div>
+      </form>
+      <section class="section nets">
+        <h2>Nets <span id="net-count"></span></h2>
+        <input id="net-search" type="search" placeholder="Find a net" aria-label="Find a net">
+        <ul id="net-list" class="net-list"></ul>
+      </section>
+    </aside>
+    <section class="board" aria-label="Schematic">
+      <header class="board-header">
+        <div><p id="cell-path" class="cell-path"></p><h1 id="cell-title">Schematic</h1></div>
+        <div class="actions toolbar" aria-label="Canvas controls">
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button id="fit" type="button">Fit</button>
+        </div>
+      </header>
+      <div id="canvas-shell" class="canvas-shell">
+        <canvas id="schematic" aria-label="Schematic diagram. Use the instance inspector for keyboard access to every terminal."></canvas>
+      </div>
+      <footer class="board-footer">
+        <span id="statistics"></span>
+        <span>Drag to pan · Scroll to zoom</span>
+      </footer>
+    </section>
+    <aside class="right panel" aria-label="Schematic inspector">
+      <section class="section">
+        <h2>Instance</h2>
+        <label class="sr-only" for="instances">Selected device</label>
+        <select id="instances"></select>
+        <p class="master" id="master"></p>
+        <ul id="terminal-list" class="terminal-list"></ul>
+      </section>
+      <section class="section">
+        <h2>Topology</h2>
+        <p id="topology-overview"></p>
+        <div id="net-details"></div>
+        <ul id="checks" class="check-list"></ul>
+      </section>
+      <section class="section review">
+        <h2>Wire handoff</h2>
+        <p id="wire-status">Select two instance terminals to draft a wire.</p>
+        <ol id="endpoints"></ol>
+        <p id="wire-effect"></p>
+        <label for="note">Note for the agent</label>
+        <textarea id="note" rows="2" maxlength="500" placeholder="Optional design intent"></textarea>
+        <div class="actions">
+          <button id="save" class="primary" type="button" disabled>Save handoff</button>
+          <button id="clear" type="button" disabled>Clear</button>
+        </div>
+        <div id="receipt" hidden>
+          <p id="receipt-path"></p>
+          <button id="copy" type="button">Copy agent request</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <div id="status" class="status" role="status" hidden></div>
+</body>
+</html>
