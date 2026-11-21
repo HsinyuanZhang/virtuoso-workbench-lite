@@ -1,13 +1,14 @@
 # virtuoso-workbench-lite
 
 A localhost browser interface for communication between a remote human and an
-agent on a headless EDA server. The human inspects topology and drafts a wire
-request. The agent reviews it and uses
+agent on a headless EDA server. The human inspects topology and creates a design
+request. The agent claims it, sends a plan, waits for approval, and uses
 [virtuoso-bridge-lite](https://github.com/Arcadia-1/virtuoso-bridge-lite) for
 separately authorized OA edits, parameter tuning, and simulation.
 
-This version preserves the existing viewer and JSON handoff workflow. It does
-**not** apply edits, launch simulation, or stream agent results back to the UI.
+The backend tracks design requests, approval, and results. It does **not** apply
+edits or launch simulation. Part A leaves the viewer unchanged. Its old Save
+handoff button does not work until Part B. Use the CLI or HTTP API for requests.
 
 ## Architecture
 
@@ -16,8 +17,10 @@ This version preserves the existing viewer and JSON handoff workflow. It does
   static build; deployed servers do not need Node.
 - Synthetic demo included. Live snapshots use the optional `virtuoso-bridge`
   package and a working daemon attached to Virtuoso.
-- Browser → localhost API → read-only OA snapshot. Browser → wire handoff →
-  agent review. The schema stays `circuit-workbench/wire-intent-v1`.
+- Browser → localhost API → read-only OA snapshot. Human → design request →
+  agent plan → human approval → external agent work → result → human acceptance.
+- The schema is `virtuoso-workbench/design-request-v1`. Its JSON Schema ships
+  inside the package under `schemas/design-request-v1.json`.
 
 ## Quick start: demo from source
 
@@ -80,24 +83,81 @@ ssh -NT -o ExitOnForwardFailure=yes -L 8765:127.0.0.1:8765 user@eda-server
 
 Open <http://127.0.0.1:8765>, enter a library/cell, and click **Open cell**.
 
-## Wire review
+## Design requests
 
-Select a net to inspect it. Select two existing instance terminals on the canvas
-or in the keyboard-accessible inspector. Review whether the proposal creates a
-net, attaches a terminal, merges nets, or joins already-connected terminals.
-Add a note, click **Save handoff**, and use **Copy agent request** to send its
-server-side path to an agent with access to the same server.
+Topology and device parameters are structured changes. Simulation setup and
+acceptance targets are natural-language text. Requests contain 1–200 ordered
+changes. Each change uses an `op` field. Supported operations are `connect`,
+`disconnect`, `add-instance`, `remove-instance`, `set-parameters`, and `add-pin`.
 
-Default handoffs are in `.workbench/handoffs` in the **launch working directory**,
-not the installed package. Use `--state-dir` for a stable location.
-Review against the latest snapshot:
+First read the snapshot and its revision:
 
 ```bash
-vwb --bridge-docker eda-container --review .workbench/handoffs/wire-ID.json
+vwb snapshot --source demo
+```
+
+Save a create payload as `request.json`. Replace `REVISION` with the returned
+snapshot revision:
+
+```json
+{
+  "target": {"source":"demo","library":"examples","cell":"Differential pair","view":"schematic"},
+  "revision": "REVISION",
+  "title": "Review the input pair width",
+  "changes": [{"op":"set-parameters","instance":"MN1","parameters":{"w":"4u"}}],
+  "simulation": "Run a DC operating point check in a scratch copy.",
+  "acceptance": "Keep both input devices in saturation.",
+  "note": "Do not change the original cell.",
+  "submit": true
+}
+```
+
+```bash
+vwb request create --file request.json
+vwb request list
+vwb request show req-0123456789ab
+vwb request approve req-0123456789ab --comment "Use a scratch copy."
+vwb request accept req-0123456789ab
+```
+
+Use approve only after the agent sends a plan. Use accept only after it sends a
+result. Use revise to ask for a new plan. Cancel is not allowed during execution.
+An agent can report failure instead. See the complete workflow in
+[docs/agent-protocol.md](docs/agent-protocol.md), or run `vwb agent guide`.
+The [skill file](skills/virtuoso-workbench/SKILL.md) supports Devin, Claude Code,
+pi, and other local harnesses. No interactive prompts are required.
+
+The state root is `.workbench` in the launch directory. Override it with
+`--state-dir` or `VWB_STATE_DIR`. Requests live in `requests/<id>.json` below it.
+This changes the old meaning of `--state-dir`, which selected the handoff folder.
+Storage requires POSIX `fcntl.flock` and atomic rename. Use a local filesystem.
+Files use mode 0600; state and request directories use mode 0700.
+
+Import old handoffs as draft requests, or review them without importing:
+
+```bash
+vwb request import-handoff old-wire.json
+vwb --bridge-docker eda-container --review old-wire.json
 ```
 
 OA reads remain read-only. Any actual route requires separate authorization,
 backup, Bridge operations, and verification outside this application.
+
+### Human HTTP API
+
+Snapshot GET endpoints are unchanged. New routes are:
+
+- `GET /api/requests`: token-free summaries.
+- `GET /api/requests/<id>`: token-free request with `lease_expired`.
+- `POST /api/requests`: the create payload above; maximum 65536 bytes.
+- `POST /api/requests/<id>/<action>`: submit, cancel, approve, revise, reject,
+  or accept; optional JSON `comment`, maximum 2000 characters and 8192 bytes.
+
+Send `Content-Type: application/json` and the same-origin `Origin` header for
+JSON POST requests. A stale revision returns 409. State conflicts also return
+409. The old `POST /api/handoffs` now returns 404. Agent changes use the local
+CLI, not HTTP. CLI commands return one JSON object and documented exit codes.
+The server writes one JSON startup object with its loopback URL.
 
 ## Security model
 
@@ -105,9 +165,9 @@ The listener binds only to `127.0.0.1`. Use localhost plus an authenticated SSH
 tunnel. There is no application login or multi-user isolation. Do not expose
 the listener or forward the Bridge daemon's port to the browser.
 
-Host/origin checks, request limits, revision checks, and atomic handoff writes
+Host/origin checks, request limits, revision checks, and atomic request writes
 are safety measures, not an authenticated deployment boundary. Only trusted
-users should have local access. Handoffs, logs, and snapshots can contain private
+users should have local access. Requests, logs, and snapshots can contain private
 design data. Never commit them, credentials, license configuration, foundry
 material, or production examples. CI needs no Cadence installation.
 
@@ -115,9 +175,9 @@ material, or production examples. CI needs no Cadence installation.
 
 The viewer preserves OA wire coordinates. Rectangles and terminal leaders are
 display aids. It uses each terminal's first pin figure and checks one schematic
-level. Warnings do not replace ERC, LVS, or simulation. Drafts connect two existing
-instance terminals. Placement, interactive routing, and direct OA writeback
-remain outside this version.
+level. Warnings do not replace ERC, LVS, or simulation. The browser still shows
+the Step 1 viewer until Part B. Direct OA writeback and simulation execution
+remain outside this tool.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [CHANGELOG.md](CHANGELOG.md)
 for changes. License: [MIT](LICENSE).

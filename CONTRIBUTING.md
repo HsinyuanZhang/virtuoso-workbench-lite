@@ -36,7 +36,13 @@ Review the staged diff before committing; do not commit generated assets.
 
 Keep changes small and test normal, empty, and error cases. Use fake Bridge
 responses, never private designs or licensed EDA tools. UI changes need browser
-tests and visual review. Do not change safety behavior in packaging-only work.
+tests and visual review. Request storage tests require POSIX flock. The dev-only
+jsonschema dependency checks persisted examples; runtime validation uses the
+standard library. Keep docs/agent-protocol.md and its packaged copy identical.
+
+Part A does not change the frontend. The existing Playwright smoke test fails
+when it saves through the removed /api/handoffs endpoint. Keep this failure
+visible until Part B replaces that interaction. Do not weaken or skip the test.
 
 This project uses MIT licensing. Submit only code and fixtures you may publish,
 and retain required third-party notices. Report suspected secrets privately
