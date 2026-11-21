@@ -2,6 +2,13 @@
 
 ## 0.1.0 — Unreleased
 
+### Instance flips and neutral gray controls
+
+- Add ordered world-horizontal instance flips with fixed bbox centers.
+- Preview flipped terminals without moving wires and report broken wire ends.
+- Add a toggled inspector flip button and an agent wire-repair contract.
+- Allow neutral grays for panels, input backgrounds, and borders.
+
 ### Step 2, Part C
 
 - Add original MIT advisory connectivity checks in Python and logical previews.

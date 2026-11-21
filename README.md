@@ -24,10 +24,16 @@ overlapping polls. Review changes, plans, results, metrics, and history. Use the
 available action buttons and add a review comment. Executing requests cannot be
 cancelled by the human. Request highlights appear only on the matching schematic.
 
-The UI uses a black background, green devices, blue wires, red pins, and white text
+The UI uses a black background, neutral gray panels and inputs, green devices, blue wires, red pins, and white text
 and selection. Errors are red. Success and met targets are green. Status uses text.
 
 ## Advisory connectivity checks
+
+Use **Flip left-right** in the instance inspector to mirror one instance in the
+draft. Click again to remove its flip. The canvas mirrors its terminals without
+moving wires. Checks report broken wire ends before Submit. After approval, the
+agent flips that same instance in OA, keeps its bbox center fixed, repairs wires,
+and runs `vwb check`. See [orientation conventions](docs/orientation.md).
 
 Use the **Checks** panel to inspect the current snapshot and the logical draft
 preview. Click a finding to highlight it. Draft edits update checks after a short

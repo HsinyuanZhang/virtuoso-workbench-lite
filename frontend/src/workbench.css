@@ -6,10 +6,13 @@
   --red: #ff0000;
   --blue: #0000ff;
   --green: #00ff00;
+  --gray-panel: #111111;
+  --gray-input: #242424;
+  --gray-border: #666666;
   color: var(--white);
   background: var(--black);
-  --panel: var(--black);
-  --line: rgb(255 255 255 / .25);
+  --panel: var(--gray-panel);
+  --line: var(--gray-border);
   --muted: rgb(255 255 255 / .75);
   --accent: var(--white);
   --mono: "SF Mono", "Cascadia Mono", Consolas, monospace;
@@ -45,7 +48,7 @@ input, select, textarea, button {
   border: 1px solid var(--line); background: var(--black); color: var(--white); border-radius: 6px;
   font-family: inherit; min-height: 33px; padding: 6px 9px;
 }
-input, select, textarea { width: 100%; }
+input, select, textarea { width: 100%; background: var(--gray-input); border-color: var(--gray-border); }
 input, select { font-family: var(--mono); }
 textarea { resize: vertical; }
 button { cursor: pointer; white-space: nowrap; }

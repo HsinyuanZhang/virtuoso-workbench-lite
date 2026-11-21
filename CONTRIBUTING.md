@@ -45,6 +45,9 @@ and send synthetic results. They do not edit OA. Each run uses a new state root
 under `.artifacts`. Set `VWB_SCREENSHOT_DIR` to save the draft and approval
 screenshots in another existing directory. The palette test scans all source CSS
 and TypeScript. Keep color literals in the CSS custom properties and `palette.ts`.
+Only the Virtuoso red, blue, and green hues are allowed. Black, white, neutral
+grays (equal RGB channels), and alpha variants are allowed. Keep flip matrix and
+geometry tests in Python and TypeScript consistent with `docs/orientation.md`.
 
 Connectivity checks run only in Python. The browser sends logical preview requests
 to the backend. Keep snapshot annotations out of revision hashes. Use the synthetic
