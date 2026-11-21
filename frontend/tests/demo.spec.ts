@@ -125,3 +125,31 @@ test("a real stale revision response preserves the local draft", async ({ page }
   await expect(page.locator("#draft-changes > li")).toHaveCount(2);
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Review differential load");
 });
+
+test("demo checks highlight a finding and update when a draft connects the floating body", async ({ page }, info) => {
+  await page.goto("/");
+  await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");
+  const finding = page.locator("#check-findings button");
+  await expect(finding).toHaveCount(1);
+  await expect(finding).toContainText("error · floating-terminal");
+  await finding.click();
+  await expect(page.locator("#instances")).toHaveValue("MN3");
+  await expect(finding).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("textbox", { name: "Parameter name", exact: true }).fill("w");
+  await page.getByRole("textbox", { name: "Parameter value", exact: true }).fill("2u");
+  await page.getByRole("button", { name: "Add parameters", exact: true }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Tie body to source");
+  await expect(page.locator("#checks-status")).toContainText("Snapshot + draft preview · 1 finding");
+  await expect(page.locator("#submit-draft")).toBeEnabled();
+  await finding.click();
+  await screenshot(page, info, "step2-checks.png");
+  await page.locator("#terminal-list button").filter({ hasText: /^BOpen$/ }).click();
+  await page.locator("#terminal-list button").filter({ hasText: /^SVSS$/ }).click();
+  await page.getByRole("button", { name: "Add connect", exact: true }).click();
+  await expect(page.locator("#checks-status")).toContainText("Snapshot + draft preview · 0 findings");
+  await expect(finding).toHaveCount(0);
+  await expect(page.locator("#submit-draft")).toBeEnabled();
+  await page.getByRole("button", { name: "Remove change 2", exact: true }).click();
+  await expect(page.locator("#checks-status")).toContainText("Snapshot + draft preview · 1 finding");
+  await expect(finding).toContainText("MN3.B has no net.");
+});

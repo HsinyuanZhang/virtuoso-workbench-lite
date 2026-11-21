@@ -81,11 +81,12 @@ canvas.port { cursor: crosshair; }
 .net-list button span:last-child, .terminal-list button span:last-child { color: var(--muted); font-size: 11px; text-align: right; }
 .master { overflow-wrap: anywhere; font: 11px var(--mono); margin-top: 7px; }
 .check-list li, #endpoints li { padding: 4px 0; font-size: 12px; overflow-wrap: anywhere; }
-.checkout, .warning, .error { color: var(--red); }
+.checkout, .warning { color: var(--white); }
+.error { color: var(--red); }
 #net-details { margin: 8px 0; }
 #net-details p, #endpoints li { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
 #wire-effect { color: var(--accent); margin-top: 6px; }
-#wire-effect.warning { color: var(--red); }
+#wire-effect.warning { color: var(--white); }
 .status {
   position: fixed; bottom: 43px; left: 18px; max-width: min(650px, calc(100vw - 36px));
   background: var(--black); border: 1px solid var(--green); border-radius: 7px; padding: 9px 12px;
@@ -101,6 +102,10 @@ canvas.port { cursor: crosshair; }
 .request-list { list-style: none; padding: 0; }
 .request-list button { width: 100%; white-space: normal; text-align: left; margin: 5px 0; overflow-wrap: anywhere; }
 .request-list button[aria-pressed="true"] { border-color: var(--white); }
+.finding-list { list-style: none; padding: 0; }
+.finding-list button { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; margin-top: 8px; }
+.finding-list button.warning { color: var(--white); }
+.finding-list button[aria-pressed="true"] { border-color: var(--white); }
 .request-list span { display: block; margin-top: 4px; font-size: 11px; }
 .request-details { max-height: 49vh; overflow: auto; border-top: 1px solid var(--white); }
 .request-details h3 { font-size: 13px; margin: 16px 0 6px; }

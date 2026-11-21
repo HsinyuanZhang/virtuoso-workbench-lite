@@ -25,6 +25,12 @@
           <button id="open-demo" type="button">Demo</button>
         </div>
       </form>
+      <section class="section" aria-label="Checks">
+        <h2>Checks</h2>
+        <p>Advisory only. Submit stays available. Draft checks change logical nets, not routing.</p>
+        <p id="checks-status" role="status">Loading checks…</p>
+        <ul id="check-findings" class="finding-list"></ul>
+      </section>
       <section class="section" aria-label="Requests">
         <h2>Requests</h2>
         <p id="request-poll-status" role="status">Loading requests…</p>
@@ -73,7 +79,6 @@
         <h2>Topology</h2>
         <p id="topology-overview"></p>
         <div id="net-details"></div>
-        <ul id="checks" class="check-list"></ul>
       </section>
       <section class="section review">
         <h2>Draft builder</h2>

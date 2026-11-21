@@ -5,6 +5,8 @@ import { palette } from "./palette";
 import { appendChange, buildDraft, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
 import type { DraftChange } from "./requests";
 import { RequestPanel, requestApi } from "./request-panel";
+import { parseFindings, previewChecks } from "./checks";
+import type { Finding } from "./checks";
 
 interface Elements {
   schematic: HTMLCanvasElement;
@@ -47,6 +49,62 @@ const colors = { wire: palette.blue, active: palette.white, dim: palette.blue, s
 let draft: DraftChange[] = [];
 let saving = false;
 const requests = new RequestPanel(() => draw(), message);
+let snapshotFindings: Finding[] = [];
+let findings: Finding[] = [];
+let activeFinding: Finding | null = null;
+let lastCheckKey = "";
+const preview = previewChecks(async (payload: unknown, signal) => {
+  const response = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal });
+  return parseFindings(parseResponse(response.status, await response.json()).checks);
+}, (results) => {
+  findings = results;
+  renderFindings("Snapshot + draft preview");
+}, (error) => {
+  renderFindings(`Checks unavailable: ${error}`, true);
+});
+window.addEventListener("pagehide", () => preview.cancel());
+
+function renderFindings(label: string, error = false): void {
+  element("checks-status").textContent = `${label}${error ? "" : ` · ${findings.length} finding${findings.length === 1 ? "" : "s"}`}`;
+  element("checks-status").classList.toggle("error", error);
+  element("check-findings").replaceChildren(...findings.map((finding) => {
+    const entry = item("li", ""), button = item("button", `${finding.severity} · ${finding.code}\n${finding.message}`, finding.severity);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(activeFinding === finding));
+    button.addEventListener("click", () => {
+      activeFinding = finding;
+      state.net = finding.net ?? null;
+      if (finding.instance) state.instance = finding.instance;
+      renderInspector();
+      renderNets();
+      renderTopology();
+      renderFindings(draft.length ? "Snapshot + draft preview" : "Current snapshot");
+      draw();
+    });
+    entry.append(button);
+    return entry;
+  }));
+}
+
+function refreshChecks(): void {
+  if (!state.snapshot) return;
+  const { source, library, cell, view, revision } = state.snapshot;
+  const payload = { target: { source, library, cell, view }, revision, changes: draft };
+  const key = JSON.stringify(payload);
+  if (key === lastCheckKey) return;
+  lastCheckKey = key;
+  activeFinding = null;
+  if (!draft.length) {
+    preview.cancel();
+    findings = snapshotFindings;
+    renderFindings("Current snapshot");
+  } else {
+    findings = [];
+    renderFindings("Checking snapshot + draft…");
+    preview.schedule(payload);
+  }
+  draw();
+}
 
 function item<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -148,7 +206,7 @@ function requestChanges() {
 }
 
 function highlightedPort(port: Port): boolean {
-  return isEndpoint(port) || requestChanges().some((change) => change.op === "connect" && change.endpoints.some((end) => end.instance === port.instance && end.terminal === port.name));
+  return isEndpoint(port) || (activeFinding?.instance === port.instance && activeFinding.terminal === port.name) || requestChanges().some((change) => change.op === "connect" && change.endpoints.some((end) => end.instance === port.instance && end.terminal === port.name));
 }
 
 function draw() {
@@ -181,7 +239,7 @@ function draw() {
     const { instance, x, y, halfWidth, halfHeight, ports } = device;
     const [left, top] = screen([x - halfWidth, y + halfHeight]);
     const [right, bottom] = screen([x + halfWidth, y - halfHeight]);
-    const chosen = state.instance === instance.name || requestChanges().some((change) => change.op === "set-parameters" && change.instance === instance.name);
+    const chosen = state.instance === instance.name || activeFinding?.instance === instance.name || requestChanges().some((change) => change.op === "set-parameters" && change.instance === instance.name);
     const connected = Boolean(state.net && ports.some((port) => port.net === state.net));
     context.fillStyle = palette.black;
     context.strokeStyle = chosen || connected ? palette.white : palette.green;
@@ -211,7 +269,7 @@ function draw() {
   for (const pin of state.snapshot.pins) {
     if (!pin.xy) continue;
     const [x, y] = screen(pin.xy);
-    const color = pin.net === state.net ? palette.white : palette.red;
+    const color = (state.net && pin.net === state.net) || activeFinding?.pin === pin.name ? palette.white : palette.red;
     context.fillStyle = color;
     context.fillRect(x - 3, y - 3, 6, 6);
     text(pin.name, x + 6, y - 9, palette.white, "left", 11, true);
@@ -235,6 +293,10 @@ function draw() {
     line([start, [midX, start[1]], [midX, end[1]], end], colors.selected, 2, [6, 4]);
   }
   state.hits.push(...wireHits);
+  for (const point of activeFinding?.points ?? []) {
+    const [x, y] = screen(point);
+    circle(x, y, 9, palette.black, palette.white);
+  }
 }
 
 function renderNets() {
@@ -261,33 +323,16 @@ function renderInspector() {
 
 function renderTopology() {
   if (!state.snapshot) return;
-  const open = [];
-  const sameNet = [];
-  for (const instance of state.snapshot.instances) {
-    const byName = new Map(instance.terminals.map((terminal) => [terminal.name.toUpperCase(), terminal]));
-    const drain = byName.get("D");
-    if (byName.has("S") && drain?.net && drain.net === byName.get("G")?.net) {
-      sameNet.push(`${instance.name} D = G`);
-    }
-    for (const terminal of instance.terminals) {
-      if (!terminal.net) open.push(`${instance.name}.${terminal.name}`);
-    }
-  }
   const net = state.nets.get(state.net ?? "");
   const details = element("net-details");
   details.replaceChildren();
   element("topology-overview").textContent = state.net && net
     ? `${state.net} · ${countLabel(net.terminals.length, "instance terminal")} · ${countLabel(net.segments, "wire segment")}`
-    : countLabel(open.length, "open instance terminal");
+    : "Select a net to inspect its snapshot membership.";
   if (net) {
     if (net.terminals.length) details.append(item("p", net.terminals.join(" · ")));
     if (net.pins.length) details.append(item("p", `I/O: ${net.pins.join(", ")}`));
   }
-  element("checks").replaceChildren(
-    ...open.slice(0, 6).map((name) => item("li", `Open: ${name}`, "warning")),
-    ...sameNet.slice(0, 6).map((name) => item("li", name)),
-    ...(open.length > 6 || sameNet.length > 6 ? [item("li", "Use the instance inspector to review more terminals.")] : []),
-  );
 }
 
 function renderDraft() {
@@ -324,6 +369,7 @@ function renderDraft() {
     entry.append(remove);
     return entry;
   }));
+  refreshChecks();
 }
 
 function selectNet(name: string | null) {
@@ -350,8 +396,10 @@ async function open(path: string) {
   element("open-demo").disabled = true;
   message("Opening schematic…");
   try {
-    const snapshot = await api<Snapshot>(path);
+    const snapshot = await api<Snapshot & { checks: unknown }>(path);
     if (request !== state.request) return;
+    snapshotFindings = parseFindings(snapshot.checks);
+    lastCheckKey = "";
     state.snapshot = snapshot;
     state.scene = buildScene(snapshot);
     state.nets = collectNets(snapshot);
