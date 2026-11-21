@@ -1,0 +1,62 @@
+name: CI
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install development tools
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e '.[dev]'
+          npm --prefix frontend ci
+          cd frontend && npx playwright install --with-deps chromium
+      - name: Frontend checks and build
+        run: |
+          npm --prefix frontend run typecheck
+          npm --prefix frontend run lint
+          npm --prefix frontend test
+          npm --prefix frontend run build
+      - name: Python checks
+        run: |
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check .
+          .venv/bin/mypy
+          .venv/bin/pytest
+      - name: Browser smoke test
+        run: npm --prefix frontend run test:e2e
+      - name: Build and verify wheel
+        run: |
+          .venv/bin/python -m build
+          .venv/bin/python scripts/check_wheel.py dist/*.whl
+      - name: Check tracked files for private identifiers
+        run: .venv/bin/python scripts/check_private_names.py
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-evidence-${{ matrix.python }}
+          path: frontend/test-results/
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
