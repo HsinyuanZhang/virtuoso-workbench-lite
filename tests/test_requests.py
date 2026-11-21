@@ -440,6 +440,10 @@ def test_schema_lifecycle_examples_and_packaged_guide(store, request_payload):
         validator.validate(store.read(identifier))
     root = Path(__file__).resolve().parents[1]
     validator.validate(json.loads((root / "docs/examples/design-request-v1.json").read_text()))
+
+
+def test_agent_protocol_copies_are_identical():
+    root = Path(__file__).resolve().parents[1]
     assert (root / "docs/agent-protocol.md").read_bytes() == (app.ROOT / "agent-protocol.md").read_bytes()
 
 
