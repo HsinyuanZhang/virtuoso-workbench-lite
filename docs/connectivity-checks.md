@@ -88,4 +88,7 @@ This is not ERC, LVS, or a routing engine. Pin figures are represented by center
 not contact areas. Net labels are absent. Labels can legally connect separate
 wire groups, so `net-not-joined` is always a warning. The checker does not infer
 shorts between differently named nets or test device operating conditions. The
-canvas remains the loaded snapshot; draft checks describe logical changes only.
+canvas previews horizontal flips, including terminal positions. Wires do not move.
+Other draft checks describe logical changes only. A horizontal flip mirrors
+terminal positions about the instance bbox center. The agent must repair the
+broken wiring after approval. See [orientation conventions](orientation.md).

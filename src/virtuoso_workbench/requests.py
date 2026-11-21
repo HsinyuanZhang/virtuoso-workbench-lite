@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
+from .orientation import flip_instance, flipped_orientation
 from .server import NAME, review_wire, revision
 
 SCHEMA = "virtuoso-workbench/design-request-v1"
@@ -227,9 +228,24 @@ def apply_changes(
                     "name": change["name"],
                     "library": change["library"],
                     "master": change["cell"],
+                    "orientation": "R0",
+                    "bbox": [],
+                    "xy": None,
                     "terminals": [{"name": name(entry), "net": None, "xy": None} for entry in terminals],
                 }
             )
+        elif operation == "flip-horizontal":
+            obj(change, ("op", "instance", "from_orientation", "to_orientation"))
+            selected = instance("instance")
+            start = text(change["from_orientation"], "From orientation", 8, 1)
+            end = text(change["to_orientation"], "To orientation", 8, 1)
+            try:
+                expected = flipped_orientation(start)
+            except ValueError as error:
+                raise RequestError(str(error)) from None
+            if start != selected.get("orientation") or end != expected:
+                raise RequestError("The flip must match the current orientation and its world horizontal mirror.")
+            flip_instance(selected)
         elif operation == "remove-instance":
             obj(change, ("op", "name"))
             working["instances"].remove(instance("name"))

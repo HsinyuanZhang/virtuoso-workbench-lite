@@ -77,7 +77,7 @@ The old token cannot renew the lease after takeover.
 3. Read the request.
 Check its target, changes, simulation text, and acceptance text.
 The op field selects each structured change.
-Operations are connect, disconnect, add-instance, remove-instance, set-parameters, and add-pin.
+Operations are connect, disconnect, add-instance, remove-instance, set-parameters, add-pin, and flip-horizontal.
 Change order matters.
 An added instance can be used by later changes.
 Master terminals come from a matching snapshot instance or a read-only master lookup.
@@ -86,6 +86,23 @@ An unknown terminal cannot be used.
 A connect change stores its review outcome and affected nets.
 If a new connection has no net name, the tool assigns an unused vwb_net_N name.
 Simulation setup and acceptance targets remain natural-language text.
+
+A flip-horizontal change selects one instance.
+Check from_orientation against the orientation after earlier changes.
+An added instance starts at R0.
+The flip mirrors world coordinates about the vertical axis through the instance bbox center.
+Do not mirror about the instance origin.
+After approval, record the current bbox center.
+Set the instance orientation to to_orientation.
+Adjust the instance origin to keep the bbox center fixed.
+Repair the wires that no longer touch the instance terminals.
+Then run vwb check.
+The browser preview does not repair wires.
+The connectivity findings show the broken wire ends before submission.
+
+```json
+{"op":"flip-horizontal","instance":"MN1","from_orientation":"R0","to_orientation":"MY"}
+```
 
 Check current connectivity before you write the plan.
 Check the logical request preview too.
@@ -105,7 +122,7 @@ Explain relevant findings in the plan risks.
 Findings are advisory.
 They do not block submission or approval.
 An error finding does not change the successful exit code.
-The preview changes logical net membership.
+The preview changes logical net membership and flip geometry.
 It does not add routes or infer master terminals.
 
 4. Send a plan.
