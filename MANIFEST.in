@@ -4,3 +4,5 @@ recursive-include frontend/src *.ts *.css
 recursive-include frontend/tests *.ts
 recursive-include scripts *.py
 recursive-include tests *.py
+recursive-include docs *.md *.json
+recursive-include skills *.md
