@@ -2,6 +2,7 @@
 
 ## 0.1.0 — Unreleased
 
+- Require Node 22.13.0 or later on 22.x for frontend tooling and native bindings.
 - Preserve the viewer, read-only Bridge snapshots, topology warnings, and JSON
   wire-intent handoff workflow.
 - Package the standard-library backend with a `vwb` command and optional Bridge
