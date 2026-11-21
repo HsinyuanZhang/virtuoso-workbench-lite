@@ -153,3 +153,33 @@ test("demo checks highlight a finding and update when a draft connects the float
   await expect(page.locator("#checks-status")).toContainText("Snapshot + draft preview · 1 finding");
   await expect(finding).toContainText("MN3.B has no net.");
 });
+
+test("unapplied parameter rows survive connect edits for the same instance", async ({ page }, info) => {
+  await page.goto("/");
+  await expect(page.locator("#cell-title")).toHaveText("Differential pair");
+  await page.locator("#instances").selectOption("MN3");
+  const names = page.getByRole("textbox", { name: "Parameter name", exact: true });
+  const values = page.getByRole("textbox", { name: "Parameter value", exact: true });
+  await names.fill("w");
+  await values.fill("2u");
+  await page.getByRole("button", { name: "Add row", exact: true }).click();
+  await page.locator("#terminal-list button").filter({ hasText: /^BOpen$/ }).click();
+  await page.locator("#terminal-list button").filter({ hasText: /^SVSS$/ }).click();
+  await page.getByRole("button", { name: "Add connect", exact: true }).click();
+  await expect(names).toHaveCount(2);
+  await expect(names.first()).toHaveValue("w");
+  await expect(values.first()).toHaveValue("2u");
+  await expect(names.last()).toHaveValue("");
+  await page.getByRole("button", { name: "Remove change 1", exact: true }).click();
+  await expect(values.first()).toHaveValue("2u");
+  await page.getByRole("button", { name: "Remove parameter row", exact: true }).last().click();
+  await page.getByRole("button", { name: "Add parameters", exact: true }).click();
+  await expect(page.locator("#draft-changes")).toContainText('"w":"2u"');
+  await values.fill("3u");
+  await page.locator("#instances").selectOption("MP1");
+  await expect(names).toHaveValue("");
+  await expect(values).toHaveValue("");
+  await page.locator("#instances").selectOption("MN3");
+  await expect(values).toHaveValue("2u");
+  await screenshot(page, info, "parameter-input-preserved.png");
+});

@@ -484,7 +484,10 @@ function parameterRow(name = "", value = ""): void {
   element("parameter-rows").append(row);
 }
 
-function renderParameters(): void {
+let parameterInstance: string | null | undefined;
+function renderParameters(force = false): void {
+  if (!force && parameterInstance === state.instance) return;
+  parameterInstance = state.instance;
   element("parameter-rows").replaceChildren();
   const change = draft.find((entry) => entry.op === "set-parameters" && entry.instance === state.instance);
   if (change?.op === "set-parameters") Object.entries(change.parameters).forEach(([key, value]) => parameterRow(key, value));
@@ -499,6 +502,7 @@ element("parameter-apply").addEventListener("click", () => {
       return [inputs[0].value, inputs[1].value];
     });
     draft = setParameters(draft, state.instance, rows);
+    renderParameters(true);
     renderDraft();
     message(`Parameters added for ${state.instance}.`);
   } catch (error) { message(error instanceof Error ? error.message : String(error), true); }
