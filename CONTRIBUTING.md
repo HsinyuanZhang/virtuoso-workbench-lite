@@ -40,9 +40,11 @@ tests and visual review. Request storage tests require POSIX flock. The dev-only
 jsonschema dependency checks persisted examples; runtime validation uses the
 standard library. Keep docs/agent-protocol.md and its packaged copy identical.
 
-Part A does not change the frontend. The existing Playwright smoke test fails
-when it saves through the removed /api/handoffs endpoint. Keep this failure
-visible until Part B replaces that interaction. Do not weaken or skip the test.
+The Playwright demo tests use the real local CLI to claim requests, send plans,
+and send synthetic results. They do not edit OA. Each run uses a new state root
+under `.artifacts`. Set `VWB_SCREENSHOT_DIR` to save the draft and approval
+screenshots in another existing directory. The palette test scans all source CSS
+and TypeScript. Keep color literals in the CSS custom properties and `palette.ts`.
 
 This project uses MIT licensing. Submit only code and fixtures you may publish,
 and retain required third-party notices. Report suspected secrets privately
