@@ -6,7 +6,8 @@ export type Action = "submit" | "cancel" | "approve" | "revise" | "reject" | "ac
 export interface Endpoint { instance: string; terminal: string }
 export interface Connect { op: "connect"; endpoints: [Endpoint, Endpoint]; net?: string; outcome?: string; affected_nets?: string[]; affected_top_level_pins?: string[] }
 export interface Parameters { op: "set-parameters"; instance: string; parameters: Record<string, string> }
-export type DraftChange = Connect | Parameters;
+export interface Flip { op: "flip-horizontal"; instance: string; from_orientation: string; to_orientation: string }
+export type DraftChange = Connect | Parameters | Flip;
 export type Change = DraftChange | { op: "disconnect"; instance: string; terminal: string }
   | { op: "add-instance"; name: string; library: string; cell: string; view: string; parameters: Record<string, string> }
   | { op: "remove-instance"; name: string } | { op: "add-pin"; name: string; direction: string; net: string };
@@ -105,6 +106,7 @@ export function parseChange(value: unknown): Change {
   const change = object(value);
   const parameters = (value: unknown): Record<string, string> => Object.fromEntries(Object.entries(object(value)).map(([key, entry]) => [key, string(entry)]));
   switch (change.op) {
+    case "flip-horizontal": return { op: change.op, instance: string(change.instance), from_orientation: string(change.from_orientation), to_orientation: string(change.to_orientation) };
     case "connect": {
       const endpoints = array(change.endpoints, (entry) => { const end = object(entry); return { instance: string(end.instance), terminal: string(end.terminal) }; });
       if (endpoints.length !== 2) throw new Error("Invalid server response.");

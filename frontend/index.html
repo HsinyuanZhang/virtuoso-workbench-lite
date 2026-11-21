@@ -27,7 +27,7 @@
       </form>
       <section class="section" aria-label="Checks">
         <h2>Checks</h2>
-        <p>Advisory only. Submit stays available. Draft checks change logical nets, not routing.</p>
+        <p>Advisory only. Submit stays available. Draft checks include flipped terminals. Wires stay fixed.</p>
         <p id="checks-status" role="status">Loading checks…</p>
         <ul id="check-findings" class="finding-list"></ul>
       </section>
@@ -66,6 +66,7 @@
         <label class="sr-only" for="instances">Selected device</label>
         <select id="instances"></select>
         <p class="master" id="master"></p>
+        <button id="flip-horizontal" type="button">Flip left-right</button>
         <ul id="terminal-list" class="terminal-list"></ul>
         <h2 class="subheading">Device parameters</h2>
         <p>Propose new values. This does not edit OA.</p>

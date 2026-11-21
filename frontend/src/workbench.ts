@@ -7,8 +7,10 @@ import type { DraftChange } from "./requests";
 import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
 import type { Finding } from "./checks";
+import { flipPreview, toggleFlip } from "./orientation";
 
 interface Elements {
+  "flip-horizontal": HTMLButtonElement;
   schematic: HTMLCanvasElement;
   "net-search": HTMLInputElement;
   library: HTMLInputElement;
@@ -239,7 +241,7 @@ function draw() {
     const { instance, x, y, halfWidth, halfHeight, ports } = device;
     const [left, top] = screen([x - halfWidth, y + halfHeight]);
     const [right, bottom] = screen([x + halfWidth, y - halfHeight]);
-    const chosen = state.instance === instance.name || activeFinding?.instance === instance.name || requestChanges().some((change) => change.op === "set-parameters" && change.instance === instance.name);
+    const chosen = state.instance === instance.name || activeFinding?.instance === instance.name || requestChanges().some((change) => (change.op === "set-parameters" || change.op === "flip-horizontal") && change.instance === instance.name);
     const connected = Boolean(state.net && ports.some((port) => port.net === state.net));
     context.fillStyle = palette.black;
     context.strokeStyle = chosen || connected ? palette.white : palette.green;
@@ -336,6 +338,12 @@ function renderTopology() {
 }
 
 function renderDraft() {
+  if (state.snapshot) {
+    state.scene = buildScene(flipPreview(state.snapshot, draft));
+    state.endpoints = state.endpoints.flatMap((endpoint) => state.scene?.devices.find((device) => device.instance.name === endpoint.instance)?.ports.filter((port) => port.name === endpoint.name) ?? []);
+    renderInspector();
+  }
+  element("flip-horizontal").disabled = !state.instance || saving;
   const endpoints = state.endpoints;
   element("wire-status").textContent = endpoints.length === 0 ? "Select two instance terminals to draft a wire."
     : endpoints.length === 1 ? "Select the other endpoint." : "Review this proposed connection.";
@@ -360,7 +368,7 @@ function renderDraft() {
   for (const field of ["title", "simulation", "acceptance", "note"] as const) element(field).disabled = saving;
   element("clear").disabled = endpoints.length === 0;
   element("draft-changes").replaceChildren(...draft.map((change, index) => {
-    const entry = item("li", JSON.stringify(change));
+    const entry = item("li", change.op === "flip-horizontal" ? `${change.instance}: ${change.from_orientation} → ${change.to_orientation}` : JSON.stringify(change));
     const remove = item("button", "Remove");
     remove.type = "button";
     remove.disabled = saving;
@@ -370,7 +378,16 @@ function renderDraft() {
     return entry;
   }));
   refreshChecks();
+  draw();
 }
+
+element("flip-horizontal").addEventListener("click", () => {
+  if (!state.snapshot || !state.instance || saving) return;
+  try {
+    draft = toggleFlip(draft, state.snapshot, state.instance);
+    renderDraft();
+  } catch (error) { message(error instanceof Error ? error.message : String(error), true); }
+});
 
 function selectNet(name: string | null) {
   state.net = name;

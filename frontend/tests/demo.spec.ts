@@ -183,3 +183,38 @@ test("unapplied parameter rows survive connect edits for the same instance", asy
   await expect(values).toHaveValue("2u");
   await screenshot(page, info, "parameter-input-preserved.png");
 });
+
+test("flip previews MN1 geometry, reports broken wiring, toggles back, and submits", async ({ page }, info) => {
+  await page.goto("/");
+  await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");
+  await page.locator("#instances").selectOption("MN1");
+  await expect(page.locator("#master")).toContainText("R0");
+  const canvas = page.locator("canvas");
+  const before = await canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL());
+  await page.getByRole("button", { name: "Flip left-right", exact: true }).click();
+  await expect(page.locator("#master")).toContainText("MY");
+  await expect(page.locator("#draft-changes")).toContainText("MN1: R0 → MY");
+  const finding = page.locator("#check-findings button").filter({ hasText: "dangling-wire-end" }).first();
+  await expect(finding).toBeVisible();
+  expect(await canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL())).not.toBe(before);
+  await finding.click();
+  await page.screenshot({ path: join(process.env.VWB_SCREENSHOT_DIR ?? info.outputDir, "step2-flip.png"), fullPage: true });
+  await page.getByRole("button", { name: "Flip left-right", exact: true }).click();
+  await expect(page.locator("#master")).toContainText("R0");
+  await expect(page.locator("#draft-changes > li")).toHaveCount(0);
+  await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");
+  await expect(finding).toHaveCount(0);
+  await page.getByRole("button", { name: "Flip left-right", exact: true }).click();
+  await expect(finding).toBeVisible();
+  await page.getByLabel("Title", { exact: true }).fill("Flip MN1 and repair wiring");
+  await page.getByLabel("Simulation setup", { exact: true }).fill("Run DC after the approved flip and wire repair.");
+  await page.getByLabel("Acceptance targets", { exact: true }).fill("Keep the bbox center fixed. Repair disconnected wires.");
+  await screenshot(page, info, "step2-gray.png");
+  const response = page.waitForResponse((response) => response.url().endsWith("/api/requests") && response.request().method() === "POST");
+  await page.locator("#submit-draft").click();
+  const result = await response;
+  expect(result.status()).toBe(201);
+  const payload = await result.json() as { request: { changes: unknown[] } };
+  expect(payload.request.changes).toEqual([{ op: "flip-horizontal", instance: "MN1", from_orientation: "R0", to_orientation: "MY" }]);
+  await expect(page.locator("#request-status")).toHaveText("submitted");
+});
