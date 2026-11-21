@@ -174,6 +174,8 @@ Report remaining findings in the result summary.
 The checks do not replace simulation or a full electrical rule check.
 
 9. Send a result.
+The artifacts field is optional.
+If you omit it, the tool stores an empty list.
 The outcome is met, not-met, partial, or error.
 Metric values are strings.
 Artifacts are relative or absolute path strings.

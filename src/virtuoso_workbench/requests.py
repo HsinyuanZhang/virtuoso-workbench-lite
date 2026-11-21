@@ -267,10 +267,11 @@ def validate_plan(payload: Any, actor: str, now: float) -> dict[str, Any]:
 
 
 def validate_result(payload: Any, actor: str, now: float) -> dict[str, Any]:
-    obj(payload, ("outcome", "summary", "metrics", "artifacts"), ("final_revision",))
+    obj(payload, ("outcome", "summary", "metrics"), ("artifacts", "final_revision"))
     if payload["outcome"] not in ("met", "not-met", "partial", "error"):
         raise RequestError("Invalid result outcome.")
     result = copy.deepcopy(payload)
+    result.setdefault("artifacts", [])
     text(result["summary"], "Summary", 8000, 1)
     for metric in items(result["metrics"], 200):
         obj(metric, ("name", "value"), ("unit", "target", "met"))

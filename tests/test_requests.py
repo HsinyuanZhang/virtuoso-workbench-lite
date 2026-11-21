@@ -340,6 +340,34 @@ def test_invalid_agent_payload_does_not_write(store, request_payload, action, pa
     assert store.read(identifier) == before
 
 
+@pytest.mark.parametrize("artifacts", [None, [], ["results/report.txt"]])
+def test_result_artifacts_default_and_schema(store, request_payload, artifacts):
+    identifier, token = claimed(store, request_payload)
+    set_state(store, identifier, "executing")
+    payload = {key: value for key, value in RESULT.items() if key != "artifacts"}
+    if artifacts is not None:
+        payload["artifacts"] = artifacts
+    before = copy.deepcopy(payload)
+    result = store.agent(identifier, "result", "worker", token, payload)["result"]
+    assert payload == before
+    assert result["artifacts"] == (artifacts or [])
+    assert store.read(identifier)["result"] == result
+    schema = json.loads((app.ROOT / "schemas/design-request-v1.json").read_text())
+    validator = jsonschema.Draft202012Validator({"$ref": "#/$defs/result", "$defs": schema["$defs"]})
+    validator.validate(result)
+    validator.validate({key: value for key, value in result.items() if key != "artifacts"})
+
+
+@pytest.mark.parametrize("artifacts", [None, "", {}, [3], [""]])
+def test_invalid_explicit_artifacts(store, request_payload, artifacts):
+    identifier, token = claimed(store, request_payload)
+    set_state(store, identifier, "executing")
+    before = store.read(identifier)
+    with pytest.raises(RequestError):
+        store.agent(identifier, "result", "worker", token, {**RESULT, "artifacts": artifacts})
+    assert store.read(identifier) == before
+
+
 def test_atomic_write_modes_and_cleanup(store, request_payload, monkeypatch):
     calls = []
     fsync, replace = os.fsync, os.replace

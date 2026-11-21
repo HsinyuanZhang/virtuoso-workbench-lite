@@ -71,9 +71,10 @@ def test_cli_end_to_end_and_stdin(tmp_path, request_payload):
         token,
         "--file",
         "-",
-        stdin='{"outcome":"partial","summary":"One check remains.","metrics":[],"artifacts":[]}',
+        stdin='{"outcome":"partial","summary":"One check remains.","metrics":[]}',
     )
     assert code == 0 and response["request"]["status"] == "result-pending"
+    assert response["request"]["result"]["artifacts"] == []
     code, response = command(tmp_path, "request", "accept", identifier)
     assert code == 0 and response["request"]["status"] == "completed"
 
