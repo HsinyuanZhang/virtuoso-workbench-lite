@@ -115,6 +115,10 @@ test("resolved artwork is selectable, flip preview stays aligned, and draft topo
   await expect(page.locator("#endpoints")).toContainText("MP1.G");
   await expect(page.locator("#endpoints")).toContainText("MP2.G");
   await expect(page.locator("#wire-status")).toContainText("Review this proposed connection");
+
+  await page.getByRole("button", { name: "Flip left-right", exact: true }).click();
+  await page.locator("canvas").click({ position: canvasPoint(originalAnchor, scene.area, size) });
+  await expect(page.locator("#endpoints")).not.toContainText("MP1.G");
 });
 
 test("visible wires stay selectable inside resolved symbols but not fallback rectangles", async ({ page }) => {

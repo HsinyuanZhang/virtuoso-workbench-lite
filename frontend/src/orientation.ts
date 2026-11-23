@@ -41,13 +41,12 @@ export function flipPreview(snapshot: Snapshot, changes: DraftChange[]): Snapsho
     for (const change of changes) {
       if (change.op !== "flip-horizontal" || change.instance !== instance.name) continue;
       if (change.from_orientation !== instance.orientation || flippedOrientation(instance.orientation) !== change.to_orientation) throw new Error("The flip does not match the current orientation.");
-      const bbox = instance.bbox;
-      const mirror = (point: Point): Point => [bbox[0][0] + bbox[1][0] - point[0], point[1]];
+      const bbox: Point[] = instance.bbox.map(([x, y]): Point => [x, y]);
       instance = { ...instance, orientation: change.to_orientation };
       if (bbox.length !== 2) continue;
-      const points = bbox.map(mirror);
+      const mirror = (point: Point): Point => [bbox[0][0] + bbox[1][0] - point[0], point[1]];
       instance = { ...instance, xy: instance.xy ? mirror(instance.xy) : null,
-        bbox: [[Math.min(...points.map(([x]) => x)), Math.min(...points.map(([, y]) => y))], [Math.max(...points.map(([x]) => x)), Math.max(...points.map(([, y]) => y))]],
+        bbox,
         terminals: instance.terminals.map((terminal) => ({
           ...terminal,
           xy: terminal.xy ? mirror(terminal.xy) : null,

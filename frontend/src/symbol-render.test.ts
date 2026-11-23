@@ -83,6 +83,23 @@ it("mirrors origin and source anchors around an asymmetric bbox center", () => {
   expect(restored).toEqual(asymmetric);
 });
 
+it("keeps a non-binary bbox exact across flip previews and UI toggle cancellation", () => {
+  const base = required(snapshot.instances.find((item) => item.name === "MP1"), "PMOS instance");
+  const asymmetric: Instance = { ...base, xy: [0.17, 0.5], bbox: [[0.1, 0.2], [0.3, 0.7]] };
+  const source = { ...snapshot, instances: [asymmetric] };
+  const firstChange = toggleFlip([], source, asymmetric.name);
+  const once = flipPreview(source, firstChange);
+  expect(once.instances[0].bbox).toEqual(asymmetric.bbox);
+
+  const secondChange = toggleFlip([], once, asymmetric.name);
+  const twice = flipPreview(once, secondChange);
+  expect(twice.instances[0].bbox).toEqual(asymmetric.bbox);
+
+  const cancelledChange = toggleFlip(firstChange, source, asymmetric.name);
+  expect(cancelledChange).toEqual([]);
+  expect(flipPreview(source, cancelledChange).instances[0]).toEqual(asymmetric);
+});
+
 it("matches two distinct source figures, creates two hit ports, and keeps them aligned after flip", () => {
   const base = required(symbols.symbols.find((entry) => entry.cell === "nmos"), "NMOS symbol");
   const instance = required(snapshot.instances.find((item) => item.name === "MN1"), "NMOS instance");
