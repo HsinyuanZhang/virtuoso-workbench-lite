@@ -101,7 +101,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["name", "direction", "pin_figures"],
       "properties": {
-        "name": {"type": "string", "pattern": "^[A-Za-z0-9_.$+!@-]{1,128}$"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$"},
         "direction": {"enum": ["input", "output", "inputOutput", "tristate", "feedthrough", "unused"]},
         "pin_figures": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/figure"}}
       }

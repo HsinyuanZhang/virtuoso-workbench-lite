@@ -293,6 +293,61 @@ def test_export_is_read_only_and_missing_cell_leaves_no_output(tmp_path):
     assert load_package(tmp_path / "ok.json")["digest"] == package["digest"]
 
 
+def test_export_and_inspect_accept_bus_terminal_names(tmp_path, capsys):
+    class BusTerminalBridge(FakeBridge):
+        def execute_skill(self, query, **kwargs):
+            result = super().execute_skill(query, **kwargs)
+            return Result(result.output.replace('"A"', '"IN<3:0>"'), result.ok)
+
+    package = export_package(
+        "generic",
+        ["nmos"],
+        "local",
+        65432,
+        client_factory=lambda **_: BusTerminalBridge(),
+        decoder=lambda value: value,
+    )
+    assert package["symbols"][0]["terminals"][0]["name"] == "IN<3:0>"
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "src/virtuoso_workbench/schemas/library-symbols-v1.json").read_text()
+    )
+    jsonschema.Draft202012Validator(schema).validate(package)
+    target = tmp_path / "bus-terminal.json"
+    write_package(target, package)
+    arguments = argparse.Namespace(symbol_action="inspect", file=target)
+    cli.execute_symbols(arguments, cli.Parser())
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["ok"] is True
+    assert load_package(target)["symbols"][0]["terminals"][0]["name"] == "IN<3:0>"
+
+
+@pytest.mark.parametrize("terminal_name", ["", "IN\n3:0", "IN\x00", "IN\x7f", "A" * 129])
+def test_terminal_names_reject_control_and_oversize_input(terminal_name):
+    package = build_package("generic", IDENTITY, [symbol()])
+    package["symbols"][0]["terminals"][0]["name"] = terminal_name
+    package["digest"] = content_digest(package)
+    with pytest.raises(SymbolPackageError, match="terminal"):
+        validate_package(package)
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "src/virtuoso_workbench/schemas/library-symbols-v1.json").read_text()
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(schema).validate(package)
+
+
+@pytest.mark.parametrize(("library", "cells"), [("generic;bad", ["nmos"]), ("generic", ["nmos;bad"])])
+def test_export_keeps_library_and_cell_skill_names_restricted(library, cells):
+    with pytest.raises(SymbolPackageError, match="valid library"):
+        export_package(
+            library,
+            cells,
+            "local",
+            65432,
+            client_factory=lambda **_: pytest.fail("invalid names must not open Bridge"),
+            decoder=lambda value: value,
+        )
+
+
 def test_failed_cli_export_never_creates_output(tmp_path, monkeypatch):
     bridge = FakeBridge()
 

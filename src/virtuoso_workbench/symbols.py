@@ -8,6 +8,7 @@ import math
 import os
 import re
 import tempfile
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -24,12 +25,23 @@ MAX_GEOMETRY_ITEMS = 100000
 MAX_DIAGNOSTICS = 128
 MAX_JSON_DEPTH = 32
 MAX_COORDINATE = 1e12
+MAX_TERMINAL_NAME_LENGTH = 128
 TERMINAL_DIRECTIONS = {"input", "output", "inputOutput", "tristate", "feedthrough", "unused"}
 ORIENTATIONS = {"R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"}
 
 
 class SymbolPackageError(ValueError):
     pass
+
+
+def _is_valid_terminal_name(value: Any) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= MAX_TERMINAL_NAME_LENGTH:
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return not any(unicodedata.category(character) == "Cc" for character in value)
 
 
 def _canonical(value: dict[str, Any]) -> bytes:
@@ -275,21 +287,18 @@ def validate_package(value: Any) -> dict[str, Any]:
             raise SymbolPackageError("A complete symbol needs renderable artwork.")
         terminal_names: set[str] = set()
         for terminal in terminals:
-            if (
-                not isinstance(terminal, dict)
-                or not isinstance(terminal.get("name"), str)
-                or not NAME.fullmatch(terminal["name"])
-            ):
+            if not isinstance(terminal, dict) or not _is_valid_terminal_name(terminal.get("name")):
                 raise SymbolPackageError("Invalid symbol terminal.")
             _exact_fields(
                 terminal, {"name", "direction", "pin_figures"}, {"name", "direction", "pin_figures"}, "terminal"
             )
             if terminal["direction"] not in TERMINAL_DIRECTIONS:
                 raise SymbolPackageError("Invalid symbol terminal direction.")
-            text_bytes += len(terminal["name"].encode("utf-8"))
-            if terminal["name"] in terminal_names:
+            terminal_name = terminal["name"]
+            text_bytes += len(terminal_name.encode("utf-8"))
+            if terminal_name in terminal_names:
                 raise SymbolPackageError("Duplicate symbol terminal.")
-            terminal_names.add(terminal["name"])
+            terminal_names.add(terminal_name)
             figures = terminal.get("pin_figures")
             if not isinstance(figures, list) or len(figures) > MAX_PRIMITIVES:
                 raise SymbolPackageError("Invalid pin figure list.")
