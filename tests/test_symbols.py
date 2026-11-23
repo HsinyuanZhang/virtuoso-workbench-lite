@@ -395,6 +395,73 @@ def test_failed_atomic_link_leaves_no_file_or_temporary_file(tmp_path, monkeypat
     assert list(tmp_path.iterdir()) == []
 
 
+def test_force_replaces_relative_and_absolute_symlink_leaves(tmp_path, monkeypatch):
+    package = build_package("generic", IDENTITY, [symbol()])
+    relative_target = tmp_path / "relative-target.json"
+    relative_target.write_bytes(b"relative target bytes")
+    relative_link = tmp_path / "relative-package.json"
+    relative_link.symlink_to(relative_target)
+    absolute_target = tmp_path / "absolute-target.json"
+    absolute_target.write_bytes(b"absolute target bytes")
+    absolute_link = tmp_path / "absolute-package.json"
+    absolute_link.symlink_to(absolute_target)
+    monkeypatch.chdir(tmp_path)
+
+    write_package(Path("relative-package.json"), package, force=True)
+    write_package(absolute_link, package, force=True)
+
+    assert not relative_link.is_symlink()
+    assert not absolute_link.is_symlink()
+    assert relative_target.read_bytes() == b"relative target bytes"
+    assert absolute_target.read_bytes() == b"absolute target bytes"
+    assert load_package(relative_link)["digest"] == package["digest"]
+    assert load_package(absolute_link)["digest"] == package["digest"]
+
+
+def test_no_force_refuses_symlinks_and_preserves_referents(tmp_path, monkeypatch):
+    package = build_package("generic", IDENTITY, [symbol()])
+    monkeypatch.chdir(tmp_path)
+    for name in ("relative", "absolute"):
+        target = tmp_path / f"{name}-target.json"
+        content = f"{name} target bytes".encode()
+        target.write_bytes(content)
+        link = tmp_path / f"{name}-package.json"
+        link.symlink_to(target)
+        path = Path(link.name) if name == "relative" else link
+        with pytest.raises(SymbolPackageError, match="exists"):
+            write_package(path, package)
+        assert link.is_symlink()
+        assert target.read_bytes() == content
+
+
+def test_no_force_refuses_dangling_symlink_without_creating_referent(tmp_path, monkeypatch):
+    package = build_package("generic", IDENTITY, [symbol()])
+    target = tmp_path / "missing-target.json"
+    link = tmp_path / "dangling-package.json"
+    link.symlink_to(target)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(SymbolPackageError, match="exists"):
+        write_package(Path(link.name), package)
+
+    assert link.is_symlink()
+    assert not target.exists()
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_force_replaces_dangling_symlink_leaf(tmp_path):
+    package = build_package("generic", IDENTITY, [symbol()])
+    target = tmp_path / "missing-target.json"
+    link = tmp_path / "dangling-package.json"
+    link.symlink_to(target)
+
+    write_package(link, package, force=True)
+
+    assert not link.is_symlink()
+    assert not target.exists()
+    assert load_package(link)["digest"] == package["digest"]
+
+
 def test_presentation_metadata_does_not_change_revision(demo):
     annotated = json.loads(json.dumps(demo))
     annotated["instances"][0]["master_view"] = "symbol"

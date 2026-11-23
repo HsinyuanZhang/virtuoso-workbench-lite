@@ -664,11 +664,10 @@ def export_package(
 def write_package(path: str | Path, package: dict[str, Any], force: bool = False) -> None:
     validated = validate_package(package)
     target = Path(path)
-    if not target.is_absolute():
-        target = target.resolve()
+    target = target.parent.resolve() / target.name
     if not target.parent.is_dir():
         raise SymbolPackageError("Export directory does not exist.")
-    if target.exists() and not force:
+    if os.path.lexists(target) and not force:
         raise SymbolPackageError("Export output exists; pass --force to replace it.")
     payload = json.dumps(validated, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
     if len(payload) > MAX_FILE_BYTES:
@@ -679,7 +678,7 @@ def write_package(path: str | Path, package: dict[str, Any], force: bool = False
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        if target.exists() and not force:
+        if os.path.lexists(target) and not force:
             raise SymbolPackageError("Export output exists; pass --force to replace it.")
         if force:
             os.replace(temporary, target)
