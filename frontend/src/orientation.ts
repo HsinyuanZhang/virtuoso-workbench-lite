@@ -20,7 +20,9 @@ export function flippedOrientation(orientation: string): string {
   const matrix = Object.hasOwn(orientations, orientation) ? orientations[orientation] : undefined;
   if (!matrix) throw new Error("Unsupported instance orientation.");
   const result = compose(orientations.MY, matrix);
-  return Object.entries(orientations).find(([, candidate]) => candidate.every((row, i) => row.every((value, j) => value === result[i][j])))![0];
+  const match = Object.entries(orientations).find(([, candidate]) => candidate.every((row, i) => row.every((value, j) => value === result[i][j])));
+  if (!match) throw new Error("Unsupported instance orientation.");
+  return match[0];
 }
 
 export function toggleFlip(changes: DraftChange[], snapshot: Snapshot, instance: string): DraftChange[] {
@@ -46,7 +48,11 @@ export function flipPreview(snapshot: Snapshot, changes: DraftChange[]): Snapsho
       const points = bbox.map(mirror);
       instance = { ...instance, xy: instance.xy ? mirror(instance.xy) : null,
         bbox: [[Math.min(...points.map(([x]) => x)), Math.min(...points.map(([, y]) => y))], [Math.max(...points.map(([x]) => x)), Math.max(...points.map(([, y]) => y))]],
-        terminals: instance.terminals.map((terminal) => ({ ...terminal, xy: terminal.xy ? mirror(terminal.xy) : null })),
+        terminals: instance.terminals.map((terminal) => ({
+          ...terminal,
+          xy: terminal.xy ? mirror(terminal.xy) : null,
+          source_pin_anchors: terminal.source_pin_anchors?.map(mirror),
+        })),
       };
     }
     return instance;

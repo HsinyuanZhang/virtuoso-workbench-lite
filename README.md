@@ -10,6 +10,18 @@ The backend tracks design requests, approval, and results. It does **not** apply
 edits or launch simulation. Use the browser to build requests, review agent plans,
 and accept results. Agents use the local CLI for claims, plans, and results.
 
+## Library-bound symbol packages
+
+`vwb symbols export --library <alias> --cell <cell> --view symbol --output <path>` reads only explicit symbol cells through Bridge. Repeat `--cell` for more cells. The export is read-only and atomic; the output path is required, and `--force` is required to replace a file. `vwb symbols inspect --file <path>` validates a package without Bridge. The versioned JSON Schema is packaged at `schemas/library-symbols-v1.json`; runtime validation is also strict. Run the synthetic demo with `python -m virtuoso_workbench serve --symbol-package fixtures/demo-symbols.json`. Packages are separate from request state and can be reused with different `--state-dir` values.
+
+Packages bind by library name, SHA-256 identity derived from the resolved path returned by `ddGetObj`, cell, and actual master view. The raw path is not stored or served. This identity binds an installation; it does not prove that library contents have not changed. The content digest excludes the timestamp and digest field. The server loads packages once at startup; restart it to load a newer export. No OA modification-time guarantee is made.
+
+Geometry uses x-right/y-up coordinates in OA user units. The optional package scale must be exactly `1`; the renderer does not scale OA coordinates. Exported line points, rectangles, polygons, ellipses, and static labels use the mapped OA attributes; arcs and other unverified shapes remain explicit incomplete geometry. Nested instances also cause fallback. Dynamic labels are not evaluated: `cdsName()` becomes an instance-name template, while recognized parameter or other `cds*` expressions are omitted with a visible warning. Static text such as `W=(typ)` is preserved. Label font, height, orientation, and justification are displayed in a simplified form, not faithfully reproduced. The instance name is overlaid when no name template exists.
+
+All pin figures and their anchor points are packaged. A live symbol resolves only when every package anchor matches a source anchor within `1e-6` OA user units. Older snapshots without source-anchor metadata may resolve only when each terminal has one verifiable anchor; extra figures use the rectangle fallback. Non-unit instance magnification also uses fallback. A non-nil OA `master~>superMaster` link marks the instance as an unsupported parameterized variant and forces fallback. Parameter values are not snapshot fields; variants that do not expose this link are not guaranteed to be detected. The checked-in geometry is synthetic; real PDK export and validation have **not** been performed.
+
+The demo leaves `MN2` at `R0` even though its snapshot terminal coordinates are mirrored. It intentionally uses the rectangle fallback; the package does not rewrite demo orientation or connectivity.
+
 ## Browser workflow
 
 Select two instance terminals and click **Add connect**. Add parameter name/value

@@ -1,6 +1,6 @@
 import "./workbench.css";
 import { buildScene, collectNets, countLabel, segmentDistance } from "./logic";
-import type { Point, Port, Snapshot, State, Hit } from "./types";
+import type { Point, Port, Snapshot, State, Hit, LibrarySymbolPackage } from "./types";
 import { palette } from "./palette";
 import { appendChange, buildDraft, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
 import type { DraftChange } from "./requests";
@@ -8,6 +8,7 @@ import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
 import type { Finding } from "./checks";
 import { flipPreview, toggleFlip } from "./orientation";
+import { resolveSymbol, transformSymbolPoint } from "./symbol-render";
 
 interface Elements {
   "flip-horizontal": HTMLButtonElement;
@@ -54,6 +55,7 @@ const requests = new RequestPanel(() => draw(), message);
 let snapshotFindings: Finding[] = [];
 let findings: Finding[] = [];
 let activeFinding: Finding | null = null;
+let symbolPackages: LibrarySymbolPackage[] = [];
 let lastCheckKey = "";
 const preview = previewChecks(async (payload: unknown, signal) => {
   const response = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal });
@@ -238,10 +240,55 @@ function draw() {
     wireHits.push({ kind: "wire", wire, path });
   }
   for (const device of state.scene.devices) {
-    const { instance, x, y, halfWidth, halfHeight, ports } = device;
-    const [left, top] = screen([x - halfWidth, y + halfHeight]);
-    const [right, bottom] = screen([x + halfWidth, y - halfHeight]);
+    const { instance, ports, hitBounds } = device;
     const chosen = state.instance === instance.name || activeFinding?.instance === instance.name || requestChanges().some((change) => (change.op === "set-parameters" || change.op === "flip-horizontal") && change.instance === instance.name);
+    const resolved = resolveSymbol(instance, symbolPackages);
+    const resolvedSymbol = resolved.symbol;
+    if (resolvedSymbol && state.snapshot) {
+      const connected = Boolean(state.net && ports.some((port) => port.net === state.net));
+      const artwork = chosen || connected ? palette.white : palette.green;
+      let hasNameTemplate = false;
+      for (const primitive of resolvedSymbol.primitives) {
+        if (primitive.type === "line" || primitive.type === "polygon") {
+          const path = primitive.points.map((point) => screen(transformSymbolPoint(point, resolvedSymbol, instance)));
+          if (primitive.type === "polygon" && path.length) path.push(path[0]);
+          line(path, artwork, 1.4);
+        } else if (primitive.type === "rect" || primitive.type === "ellipse") {
+          const [[left, bottom], [right, top]] = primitive.bbox;
+          const corners: Point[] = [[left, bottom], [left, top], [right, bottom], [right, top]];
+          const pixels = corners.map((point) => screen(transformSymbolPoint(point, resolvedSymbol, instance)));
+          const x0 = Math.min(...pixels.map(([px]) => px));
+          const x1 = Math.max(...pixels.map(([px]) => px));
+          const y0 = Math.min(...pixels.map(([, py]) => py));
+          const y1 = Math.max(...pixels.map(([, py]) => py));
+          context.strokeStyle = artwork;
+          context.lineWidth = 1.4;
+          if (primitive.type === "rect") context.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          else {
+            context.beginPath();
+            context.ellipse((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2, 0, 0, Math.PI * 2);
+            context.stroke();
+          }
+        } else if (primitive.type === "label") {
+          const [lx, ly] = screen(transformSymbolPoint(primitive.xy, resolvedSymbol, instance));
+          text(primitive.text, lx, ly, palette.white, "left", 10, true);
+        } else if (primitive.type === "instance-name") {
+          hasNameTemplate = true;
+          const [lx, ly] = screen(transformSymbolPoint(primitive.xy, resolvedSymbol, instance));
+          text(instance.name, lx, ly, palette.white, "left", 10, true);
+        }
+      }
+      if (!hasNameTemplate) {
+        const [nameX, nameY] = screen(transformSymbolPoint(resolvedSymbol.origin, resolvedSymbol, instance));
+        text(instance.name, nameX, nameY, palette.white, "center", 10, true);
+      }
+      const [left, top] = screen([hitBounds.left, hitBounds.top]);
+      const [right, bottom] = screen([hitBounds.right, hitBounds.bottom]);
+      state.hits.push({ kind: "device", instance: instance.name, left, right, top, bottom });
+      continue;
+    }
+    const [left, top] = screen([hitBounds.left, hitBounds.top]);
+    const [right, bottom] = screen([hitBounds.right, hitBounds.bottom]);
     const connected = Boolean(state.net && ports.some((port) => port.net === state.net));
     context.fillStyle = palette.black;
     context.strokeStyle = chosen || connected ? palette.white : palette.green;
@@ -264,7 +311,7 @@ function draw() {
       const selected = highlightedPort(port);
       const active = Boolean(state.net && state.net === port.net);
       const color = selected || active ? palette.white : palette.red;
-      if (port.xy) line([screen(port.xy), [x, y]], color, 1.15, [2, 2]);
+      if (port.xy && port.side !== "symbol") line([screen(port.xy), [x, y]], color, 1.15, [2, 2]);
       renderedPorts.push({ port, x, y, color, selected, active, device });
     }
   }
@@ -281,8 +328,8 @@ function draw() {
     const radius = selected ? 5.5 : 3.4;
     circle(x, y, radius, selected ? color : palette.black, color);
     const current = selected || active || device.instance.name === state.instance;
-    if (current || device.halfHeight * state.view.scale > 12) {
-      const deltaX = port.side === "left" ? -8 : port.side === "right" ? 8 : 0;
+    if ((current || device.halfHeight * state.view.scale > 12) && (port.side !== "symbol" || port.anchorIndex === 0)) {
+      const deltaX = port.side === "left" ? -8 : port.side === "right" ? 8 : port.side === "symbol" ? 8 : 0;
       const deltaY = port.side === "top" ? -9 : port.side === "bottom" ? 9 : 0;
       const align = deltaX < 0 ? "right" : deltaX > 0 ? "left" : "center";
       text(port.name, x + deltaX, y + deltaY, current ? colors.text : colors.muted, align, 10, true);
@@ -316,8 +363,14 @@ function renderInspector() {
   const device = state.scene.devices.find((entry) => entry.instance.name === state.instance);
   const terminalList = element("terminal-list");
   element("master").textContent = device ? `${device.instance.library}/${device.instance.master} · ${device.instance.orientation}` : "";
+  if (device) {
+    const result = resolveSymbol(device.instance, symbolPackages);
+    const warnings = result.symbol?.diagnostics.length ? ` · warning: ${result.symbol.diagnostics.join(", ")}` : "";
+    element("symbol-status").textContent = `Symbol: ${result.reason}${warnings}`;
+  } else element("symbol-status").textContent = "";
   if (device) element("instances").value = device.instance.name;
-  terminalList.replaceChildren(...(device?.ports ?? []).map((port) => listButton(
+  const listedPorts = [...new Map((device?.ports ?? []).map((port) => [port.name, port])).values()];
+  terminalList.replaceChildren(...listedPorts.map((port) => listButton(
     port.name, port.net ?? "Open", isEndpoint(port), () => chooseTerminal(port),
   )));
   renderParameters();
@@ -339,8 +392,14 @@ function renderTopology() {
 
 function renderDraft() {
   if (state.snapshot) {
-    state.scene = buildScene(flipPreview(state.snapshot, draft));
-    state.endpoints = state.endpoints.flatMap((endpoint) => state.scene?.devices.find((device) => device.instance.name === endpoint.instance)?.ports.filter((port) => port.name === endpoint.name) ?? []);
+    const preview = flipPreview(state.snapshot, draft);
+    state.scene = buildScene(preview, symbolPackages);
+    state.endpoints = state.endpoints.flatMap((endpoint) => {
+      const ports = state.scene?.devices.find((device) => device.instance.name === endpoint.instance)?.ports ?? [];
+      const matched = ports.find((port) => port.name === endpoint.name && port.anchorIndex === endpoint.anchorIndex);
+      return matched ? [matched] : [];
+    });
+    renderSymbolSummary(preview);
     renderInspector();
   }
   element("flip-horizontal").disabled = !state.instance || saving;
@@ -381,6 +440,21 @@ function renderDraft() {
   draw();
 }
 
+function renderSymbolSummary(snapshot: Snapshot): void {
+  const results = snapshot.instances.map((instance) => resolveSymbol(instance, symbolPackages));
+  const fallbackReasons = new Map<string, number>();
+  for (const result of results) if (!result.symbol) fallbackReasons.set(result.reason, (fallbackReasons.get(result.reason) ?? 0) + 1);
+  const reasonSummary = [...fallbackReasons].map(([reason, count]) => `${reason} ${count}`).join(", ");
+  const warnings = results.flatMap((result) => result.symbol?.diagnostics ?? []);
+  const warningSummary = warnings.length ? ` · ${warnings.length} symbol warning${warnings.length === 1 ? "" : "s"}` : "";
+  element("statistics").textContent = [
+    countLabel(snapshot.instances.length, "instance"),
+    countLabel(snapshot.pins.length, "I/O pin"),
+    countLabel(snapshot.wires.length, "wire segment"),
+    `Symbols: ${results.filter((result) => result.symbol).length} resolved · ${results.filter((result) => !result.symbol).length} fallback${reasonSummary ? ` (${reasonSummary})` : ""}${warningSummary}`,
+  ].join(" · ");
+}
+
 element("flip-horizontal").addEventListener("click", () => {
   if (!state.snapshot || !state.instance || saving) return;
   try {
@@ -397,7 +471,10 @@ function selectNet(name: string | null) {
 }
 
 function chooseTerminal(port: Port) {
-  if (isEndpoint(port)) state.endpoints = state.endpoints.filter((end) => end.instance !== port.instance || end.name !== port.name);
+  const endpointIndex = state.endpoints.findIndex((end) => end.instance === port.instance && end.name === port.name);
+  if (endpointIndex >= 0 && state.endpoints[endpointIndex].anchorIndex !== port.anchorIndex) {
+    state.endpoints = state.endpoints.map((end, index) => index === endpointIndex ? port : end);
+  } else if (endpointIndex >= 0) state.endpoints = state.endpoints.filter((_, index) => index !== endpointIndex);
   else if (state.endpoints.length === 2) state.endpoints = [port];
   else state.endpoints.push(port);
   state.instance = port.instance;
@@ -413,12 +490,14 @@ async function open(path: string) {
   element("open-demo").disabled = true;
   message("Opening schematic…");
   try {
+    const configured = await api<{ packages: LibrarySymbolPackage[] }>("/api/symbols");
+    symbolPackages = configured.packages;
     const snapshot = await api<Snapshot & { checks: unknown }>(path);
     if (request !== state.request) return;
     snapshotFindings = parseFindings(snapshot.checks);
     lastCheckKey = "";
     state.snapshot = snapshot;
-    state.scene = buildScene(snapshot);
+    state.scene = buildScene(snapshot, symbolPackages);
     state.nets = collectNets(snapshot);
     state.instance = snapshot.instances[0]?.name ?? null;
     state.net = null;
@@ -431,11 +510,7 @@ async function open(path: string) {
     element("source").replaceChildren(document.createElement("i"), document.createTextNode(
       snapshot.source === "demo" ? "Demo" : "Virtuoso · Read only",
     ));
-    element("statistics").textContent = [
-      countLabel(snapshot.instances.length, "instance"),
-      countLabel(snapshot.pins.length, "I/O pin"),
-      countLabel(snapshot.wires.length, "wire segment"),
-    ].join(" · ");
+    renderSymbolSummary(snapshot);
     element("instances").replaceChildren(...snapshot.instances.map((instance) => item("option", instance.name)));
     element("instances").disabled = !snapshot.instances.length;
     renderNets();

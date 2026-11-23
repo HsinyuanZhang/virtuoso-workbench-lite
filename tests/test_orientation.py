@@ -69,6 +69,24 @@ def test_flip_geometry_wires_stay_in_place_and_demo_detects_break(demo):
     assert validate_changes([flip()], demo) == validated
 
 
+def test_flip_preview_mirrors_all_source_pin_anchors_without_revision_change(demo):
+    without_metadata = copy.deepcopy(demo)
+    snapshot = copy.deepcopy(demo)
+    selected = next(instance for instance in snapshot["instances"] if instance["name"] == "MN1")
+    selected["terminals"][0]["source_pin_anchors"] = [[-4, 0.7], [-4.2, 0.7]]
+    revision = app.revision(snapshot)
+    assert revision == app.revision(without_metadata)
+    _, preview = apply_changes([flip()], snapshot, preview=True)
+    _, plain_preview = apply_changes([flip()], without_metadata, preview=True)
+    after = next(instance for instance in preview["instances"] if instance["name"] == "MN1")
+    assert after["terminals"][0]["source_pin_anchors"] == [[-4, 0.7], [-3.8, 0.7]]
+    assert after["terminals"][0]["xy"] == pytest.approx([-4, 0.7])
+    assert app.revision(preview) == app.revision(plain_preview)
+    _, restored = apply_changes([flip(), flip(start="MY", end="R0")], snapshot, preview=True)
+    restored_instance = next(instance for instance in restored["instances"] if instance["name"] == "MN1")
+    assert restored_instance["terminals"][0]["source_pin_anchors"] == selected["terminals"][0]["source_pin_anchors"]
+
+
 @pytest.mark.parametrize(
     "changes",
     [

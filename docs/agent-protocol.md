@@ -1,5 +1,17 @@
 # Agent protocol
 
+## Symbol package limits
+
+Symbol packages are read-only presentation data. They do not change snapshot connectivity or request revisions. Match a package by library name, identity, cell, and actual master view. A snapshot without a library identity uses the rectangle fallback.
+
+The server loads configured packages at startup. Restart the server to load a newer package. The identity is a hash of the resolved library path. It binds one installation but does not prove that the library contents have not changed. The digest excludes the export timestamp and digest field. The raw library path is not stored or served.
+
+Package coordinates use x-right/y-up OA user units. If `coordinate_system.scale` is present, it must be exactly `1`; the renderer uses OA user units without scaling. Supported artwork is line, rectangle, polygon, ellipse, and static label data. Unverified shapes such as arcs and nested instances use fallback. The exporter does not evaluate dynamic labels: cdsName() is an instance-name template; recognized parameter expressions are omitted with a warning. Static parentheses remain ordinary text. Label font, height, orientation, and justification use simplified display. The instance name is shown when there is no name template.
+
+Packages include all pin figures and their anchors. Every package anchor must match a live source anchor within 1e-6 OA user units. A legacy snapshot without source anchors can resolve only a single anchor per terminal. Missing or unmatched anchors use fallback. Non-unit instance magnification also uses fallback. A non-nil OA `master~>superMaster` link marks an instance as an unsupported parameterized variant. Parameter values are not snapshot fields; variants that do not expose this link are not guaranteed to be detected. The fixture is synthetic; real PDK validation has not been performed.
+
+The geometry attributes follow Cadence SKILL references: [polygons expose `points`](https://community.cadence.com/cadence_technology_forums/f/custom-ic-skill/28390/how-to-get-coordinates-of-polygons), and [ellipses use a bounding box](https://community.cadence.com/cadence_technology_forums/f/custom-ic-skill/62714/coordinates-bboxes-of-all-the-shapes-layers-in-a-layout-view). Cadence's [PCell discussion](https://community.cadence.com/cadence_technology_forums/f/custom-ic-skill/47249/pcell-creation-in-virtuoso-18-1) describes parameterized subMasters, while the [cellview attribute discussion](https://community.cadence.com/cadence_technology_forums/f/custom-ic-skill/40982/attribute-inside-cellview) documents `superMaster` as a cellview attribute. The package checks that link conservatively; its presence on real PDK symbol masters has not been verified.
+
 ## Boundary and safety
 
 This tool tracks requests.
