@@ -41,6 +41,20 @@ async function fingerprint(page: import("@playwright/test").Page) {
   });
 }
 
+async function routeDemoWithSymbolWire(page: import("@playwright/test").Page) {
+  await page.route("**/api/demo", async (route) => {
+    const response = await route.fetch();
+    const snapshot = await response.json() as Snapshot;
+    await route.fulfill({
+      response,
+      json: {
+        ...snapshot,
+        wires: [...snapshot.wires, { net: "SYMBOL_SPAN", points: [[-5.3, 5.5], [-4.8, 5.5]] }],
+      },
+    });
+  });
+}
+
 test("resolved artwork is selectable, flip preview stays aligned, and draft topology stays fixed", async ({ page }) => {
   await page.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [symbols] } }));
   await page.goto("/");
@@ -101,6 +115,50 @@ test("resolved artwork is selectable, flip preview stays aligned, and draft topo
   await expect(page.locator("#endpoints")).toContainText("MP1.G");
   await expect(page.locator("#endpoints")).toContainText("MP2.G");
   await expect(page.locator("#wire-status")).toContainText("Review this proposed connection");
+});
+
+test("visible wires stay selectable inside resolved symbols but not fallback rectangles", async ({ page }) => {
+  await page.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [symbols] } }));
+  await routeDemoWithSymbolWire(page);
+  await page.goto("/");
+  await expect(page.locator("#symbol-status")).toContainText("resolved");
+  const snapshot = await page.evaluate(async () => await (await fetch("/api/demo")).json()) as Snapshot;
+  const scene = buildScene(snapshot, [symbols]);
+  const size = await page.locator("canvas").evaluate((canvas: HTMLCanvasElement) => ({ width: canvas.clientWidth, height: canvas.clientHeight }));
+  const point: Point = [-5.05, 5.5];
+  const device = scene.devices.find((entry) => entry.instance.name === "MP1");
+  if (!device) throw new Error("Missing resolved PMOS instance.");
+  expect(point[0]).toBeGreaterThan(device.hitBounds.left);
+  expect(point[0]).toBeLessThan(device.hitBounds.right);
+  expect(point[1]).toBeGreaterThan(device.hitBounds.bottom);
+  expect(point[1]).toBeLessThan(device.hitBounds.top);
+  const sample = canvasPoint(point, scene.area, size);
+  const pixel = await page.locator("canvas").evaluate((canvas: HTMLCanvasElement, position: { x: number; y: number }) => {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas context is unavailable.");
+    const ratio = window.devicePixelRatio || 1;
+    return [...context.getImageData(Math.round(position.x * ratio), Math.round(position.y * ratio), 1, 1).data];
+  }, sample);
+  expect(pixel[2]).toBeGreaterThan(pixel[0]);
+  await page.locator("canvas").click({ position: sample });
+  await expect(page.locator("#topology-overview")).toContainText("SYMBOL_SPAN");
+
+  const fallbackPage = await page.context().newPage();
+  await fallbackPage.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [] } }));
+  await routeDemoWithSymbolWire(fallbackPage);
+  await fallbackPage.goto(new URL("/", page.url()).toString());
+  const fallbackSnapshot = await fallbackPage.evaluate(async () => await (await fetch("/api/demo")).json()) as Snapshot;
+  const fallbackScene = buildScene(fallbackSnapshot, []);
+  const fallbackSize = await fallbackPage.locator("canvas").evaluate((canvas: HTMLCanvasElement) => ({ width: canvas.clientWidth, height: canvas.clientHeight }));
+  const fallbackDevice = fallbackScene.devices.find((entry) => entry.instance.name === "MP1");
+  if (!fallbackDevice) throw new Error("Missing fallback PMOS instance.");
+  expect(point[0]).toBeGreaterThan(fallbackDevice.hitBounds.left);
+  expect(point[0]).toBeLessThan(fallbackDevice.hitBounds.right);
+  expect(point[1]).toBeGreaterThan(fallbackDevice.hitBounds.bottom);
+  expect(point[1]).toBeLessThan(fallbackDevice.hitBounds.top);
+  await fallbackPage.locator("canvas").click({ position: canvasPoint(point, fallbackScene.area, fallbackSize) });
+  await expect(fallbackPage.locator("#topology-overview")).not.toContainText("SYMBOL_SPAN");
+  await fallbackPage.close();
 });
 
 test("one immutable package serves two isolated state directories", async ({ page }) => {

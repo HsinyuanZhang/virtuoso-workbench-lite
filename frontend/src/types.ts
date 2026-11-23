@@ -39,7 +39,7 @@ export type Hit =
   | { kind: "terminal"; port: Port; x: number; y: number }
   | { kind: "pin"; pin: Pin; x: number; y: number }
   | { kind: "wire"; wire: Wire; path: Point[] }
-  | { kind: "device"; instance: string; left: number; right: number; top: number; bottom: number };
+  | { kind: "device"; instance: string; left: number; right: number; top: number; bottom: number; symbolResolved: boolean };
 export interface State {
   snapshot: Snapshot | null; scene: Scene | null; nets: Map<string, Net>;
   instance: string | null; net: string | null; endpoints: Port[];

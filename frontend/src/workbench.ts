@@ -284,7 +284,7 @@ function draw() {
       }
       const [left, top] = screen([hitBounds.left, hitBounds.top]);
       const [right, bottom] = screen([hitBounds.right, hitBounds.bottom]);
-      state.hits.push({ kind: "device", instance: instance.name, left, right, top, bottom });
+      state.hits.push({ kind: "device", instance: instance.name, left, right, top, bottom, symbolResolved: true });
       continue;
     }
     const [left, top] = screen([hitBounds.left, hitBounds.top]);
@@ -302,7 +302,7 @@ function draw() {
     } else {
       text(instance.name, left + 2, top - 9, colors.text, "left", 10, true);
     }
-    state.hits.push({ kind: "device", instance: instance.name, left, right, top, bottom });
+    state.hits.push({ kind: "device", instance: instance.name, left, right, top, bottom, symbolResolved: false });
   }
   const renderedPorts = [];
   for (const device of state.scene.devices) {
@@ -637,11 +637,14 @@ function hitTest(x: number, y: number): Hit | undefined {
     }
   }
   if (nearest) return nearest;
-  return state.hits.find((hit) => {
-    if (hit.kind === "device") return x >= hit.left && x <= hit.right && y >= hit.top && y <= hit.bottom;
-    if (hit.kind === "wire") return hit.path.some((point, index) => index && segmentDistance(x, y, hit.path[index - 1], point) < 5);
-    return false;
-  });
+  const contains = (hit: Extract<Hit, { kind: "device" }>) =>
+    x >= hit.left && x <= hit.right && y >= hit.top && y <= hit.bottom;
+  const fallback = state.hits.find((hit) => hit.kind === "device" && !hit.symbolResolved && contains(hit));
+  const wire = state.hits.find((hit) =>
+    hit.kind === "wire" && hit.path.some((point, index) => index && segmentDistance(x, y, hit.path[index - 1], point) < 5));
+  if (fallback) return fallback;
+  if (wire && state.hits.some((hit) => hit.kind === "device" && hit.symbolResolved && contains(hit))) return wire;
+  return state.hits.find((hit) => hit.kind === "device" && contains(hit)) ?? wire;
 }
 
 canvas.addEventListener("pointerdown", (event) => {
