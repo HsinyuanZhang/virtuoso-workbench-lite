@@ -466,6 +466,24 @@ def parse_skill_value(raw: str) -> Any:
     return value
 
 
+def decode_bridge_skill_output(raw: str, fallback_decoder: Callable[[str], str]) -> str:
+    if not isinstance(raw, str):
+        raise SymbolPackageError("Bridge returned a non-text symbol response.")
+    if len(raw) > MAX_FILE_BYTES:
+        raise SymbolPackageError("Bridge symbol response exceeds the size limit.")
+    if raw.lstrip().startswith('"'):
+        decoded = parse_skill_value(raw)
+        if not isinstance(decoded, str):
+            raise SymbolPackageError("Bridge returned an invalid string wrapper.")
+    else:
+        decoded = fallback_decoder(raw)
+    if not isinstance(decoded, str):
+        raise SymbolPackageError("Bridge returned a non-text symbol response.")
+    if len(decoded) > MAX_FILE_BYTES:
+        raise SymbolPackageError("Bridge symbol response exceeds the size limit.")
+    return decoded
+
+
 def _skill_string(value: str) -> str:
     if not NAME.fullmatch(value):
         raise SymbolPackageError("Invalid library or cell name.")
@@ -641,13 +659,17 @@ def export_package(
             from virtuoso_bridge import VirtuosoClient, decode_skill_output
         except ImportError as error:
             raise SymbolPackageError("Install the supported Bridge package to export symbols.") from error
-        client_factory = VirtuosoClient.local
-        decoder = decode_skill_output
+        if client_factory is None:
+            client_factory = VirtuosoClient.local
+        if decoder is None:
+            decoder = decode_skill_output
+    if client_factory is None or decoder is None:
+        raise SymbolPackageError("A Bridge client and output decoder are required.")
     with client_factory(host=bridge_host, port=bridge_port, timeout=30) as client:
         identity_result = client.execute_skill(_identity_query(library), timeout=30)
         if not identity_result.ok:
             raise SymbolPackageError("Bridge could not read the library identity.")
-        identity_record = parse_skill_value(decoder(identity_result.output))
+        identity_record = parse_skill_value(decode_bridge_skill_output(identity_result.output, decoder))
         if not isinstance(identity_record, list) or len(identity_record) != 2 or identity_record[0] != "OK":
             raise SymbolPackageError("Bridge could not resolve the library.")
         identity_path = identity_record[1]
@@ -657,7 +679,9 @@ def export_package(
             response = client.execute_skill(_symbol_query(library, cell, view), timeout=60)
             if not response.ok:
                 raise SymbolPackageError(f"Bridge could not read symbol {cell}.")
-            symbols.append(_symbol_from_skill(cell, parse_skill_value(decoder(response.output))))
+            symbols.append(
+                _symbol_from_skill(cell, parse_skill_value(decode_bridge_skill_output(response.output, decoder)))
+            )
     return build_package(library, identity, symbols, source_version)
 
 

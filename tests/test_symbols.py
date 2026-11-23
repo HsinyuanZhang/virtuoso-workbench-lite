@@ -16,6 +16,7 @@ from virtuoso_workbench.symbols import (
     _symbol_from_skill,
     build_package,
     content_digest,
+    decode_bridge_skill_output,
     export_package,
     load_package,
     load_packages,
@@ -25,6 +26,31 @@ from virtuoso_workbench.symbols import (
 )
 
 IDENTITY = "sha256:" + "a" * 64
+
+
+def _skill_literal(value):
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if value is None:
+        return "nil"
+    if value is True:
+        return "t"
+    if value is False:
+        return "nil"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, list):
+        return "(" + " ".join(_skill_literal(item) for item in value) + ")"
+    raise TypeError("Unsupported synthetic SKILL value.")
+
+
+def _bridge_transport_output(value):
+    return json.dumps(_skill_literal(value), ensure_ascii=False)
+
+
+def _legacy_bridge_decoder(raw):
+    text = (raw or "").strip().strip('"')
+    return text.replace("\\n", "\n").replace('\\"', '"')
 
 
 def symbol(cell="nmos", complete=True, diagnostics=None):
@@ -291,6 +317,82 @@ def test_export_is_read_only_and_missing_cell_leaves_no_output(tmp_path):
     with pytest.raises(SymbolPackageError, match="exists"):
         write_package(tmp_path / "ok.json", package)
     assert load_package(tmp_path / "ok.json")["digest"] == package["digest"]
+
+
+def test_bridge_transport_wrapper_preserves_nested_skill_escaping():
+    values = [
+        "OK",
+        'cdsParam("w")',
+        'quote: "x"',
+        r"path: \\eda\\cell",
+        "line1\nline2",
+        "café Ω",
+    ]
+    skill_output = _skill_literal(values)
+    raw_output = json.dumps(skill_output, ensure_ascii=False)
+
+    assert decode_bridge_skill_output(raw_output, _legacy_bridge_decoder) == skill_output
+    assert parse_skill_value(skill_output) == values
+    with pytest.raises(SymbolPackageError, match="extra symbol data"):
+        parse_skill_value(_legacy_bridge_decoder(raw_output))
+
+
+def test_bridge_transport_wrapper_rejects_truncated_and_oversized_values():
+    truncated_wrapper = _bridge_transport_output(["OK"])[:-1]
+    with pytest.raises(SymbolPackageError, match="Unterminated Bridge string"):
+        decode_bridge_skill_output(truncated_wrapper, _legacy_bridge_decoder)
+
+    malformed_inner = json.dumps('( "OK"', ensure_ascii=False)
+    with pytest.raises(SymbolPackageError, match="Malformed Bridge list"):
+        parse_skill_value(decode_bridge_skill_output(malformed_inner, _legacy_bridge_decoder))
+
+    oversized = "x" * (symbol_module.MAX_FILE_BYTES + 1)
+    with pytest.raises(SymbolPackageError, match="size limit"):
+        decode_bridge_skill_output(oversized, _legacy_bridge_decoder)
+
+
+def test_export_decodes_wrapped_bridge_output_and_preserves_static_labels():
+    symbol_value = [
+        "OK",
+        [[-1, -1], [1, 1]],
+        [0, 0],
+        [
+            ["line", [[0, 0], [1, 0]], "drawing", "drawing"],
+            ["label", 'cdsParam("w")', [0, 0], "drawing", "drawing"],
+            ["label", 'width (typ) "quoted" \\path Ω', [0, 0], "drawing", "drawing"],
+        ],
+        [["A", "inputOutput", [[[-1, -1], [-1, 1]]]]],
+        0,
+    ]
+
+    class WrappedBridge:
+        def __init__(self):
+            self.queries = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute_skill(self, query, **_):
+            self.queries.append(query)
+            value = ["OK", "/synthetic/library"] if "ddGetObj" in query else symbol_value
+            return Result(_bridge_transport_output(value))
+
+    package = export_package(
+        "generic",
+        ["nmos"],
+        "local",
+        65432,
+        client_factory=lambda **_: WrappedBridge(),
+        decoder=_legacy_bridge_decoder,
+    )
+    exported = package["symbols"][0]
+    labels = [primitive["text"] for primitive in exported["primitives"] if primitive["type"] == "label"]
+    assert exported["complete"] is True
+    assert "unsupported-dynamic-label" in exported["diagnostics"]
+    assert labels == ['width (typ) "quoted" \\path Ω']
 
 
 def test_export_and_inspect_accept_bus_terminal_names(tmp_path, capsys):
@@ -650,3 +752,45 @@ def test_read_snapshot_attaches_matching_fake_bridge_anchors_and_rejects_stale_b
     unavailable = server.read_snapshot("examples", "test", "local", 65432, include_symbol_metadata=True)
     assert unavailable["cell"] == "test"
     assert unavailable["instances"][0]["symbol_metadata_error"] == "metadata-unavailable"
+
+
+def test_read_snapshot_decodes_metadata_wrapper_and_keeps_snapshot_decoder(monkeypatch):
+    snapshot_output = "SNAPSHOT\nI|X|generic|nmos|R0|(0 1)|((-1 -1) (1 1))\nT|D|N|(0 1)\nEND"
+    metadata_rows = [["X", "generic", "nmos", "symbol", "/synthetic/library", 1.0, None, [["D", [[0, 1], [0.25, 1]]]]]]
+    decoder_inputs = []
+
+    def legacy_decoder(raw):
+        decoder_inputs.append(raw)
+        return _legacy_bridge_decoder(raw)
+
+    class WrappedMetadataClient:
+        def __init__(self):
+            self.queries = []
+
+        @classmethod
+        def local(cls, **_):
+            return cls()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute_skill(self, query, **_):
+            self.queries.append(query)
+            if len(self.queries) == 1:
+                return Result(snapshot_output)
+            return Result(_bridge_transport_output(metadata_rows))
+
+    module = types.ModuleType("virtuoso_bridge")
+    module.VirtuosoClient = WrappedMetadataClient
+    module.decode_skill_output = legacy_decoder
+    monkeypatch.setitem(sys.modules, "virtuoso_bridge", module)
+
+    snapshot = server.read_snapshot("examples", "test", "local", 65432, include_symbol_metadata=True)
+
+    instance = snapshot["instances"][0]
+    assert instance["master_view"] == "symbol"
+    assert instance["terminals"][0]["source_pin_anchors"] == [[0.0, 1.0], [0.25, 1.0]]
+    assert decoder_inputs == [snapshot_output]

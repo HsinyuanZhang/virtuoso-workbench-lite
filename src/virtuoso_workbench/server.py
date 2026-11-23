@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from .checks import check_preview, connectivity_checks
-from .symbols import SymbolPackageError, library_identity, parse_skill_value
+from .symbols import SymbolPackageError, decode_bridge_skill_output, library_identity, parse_skill_value
 
 if TYPE_CHECKING:
     from .requests import RequestStore
@@ -217,7 +217,7 @@ def read_snapshot(
         _mark_symbol_metadata_error(snapshot, "metadata-unavailable")
     elif metadata_result is not None:
         try:
-            rows = parse_skill_value(decode_skill_output(metadata_result.output))
+            rows = parse_skill_value(decode_bridge_skill_output(metadata_result.output, decode_skill_output))
             _attach_symbol_metadata(snapshot, rows)
         except Exception:
             _mark_symbol_metadata_error(snapshot, "metadata-invalid")
