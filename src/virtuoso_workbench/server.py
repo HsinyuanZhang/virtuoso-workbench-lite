@@ -44,7 +44,7 @@ SYMBOL_METADATA_QUERY = r"""let((cv rows lib path inst transform mag parameteriz
             foreach(fig pin~>figs
               bb=when(fig~>bBox dbTransformBBox(fig~>bBox transform))
               when(bb anchors=cons(list((xCoord(car(bb)) + xCoord(cadr(bb))) / 2.0
-                                        (yCoord(car(bb)) + yCoord(cadr(bb))) / 2.0) anchors)))
+                                        (yCoord(car(bb)) + yCoord(cadr(bb))) / 2.0) anchors))))
           termRows=cons(list(term~>name reverse(anchors)) termRows))
         rows=cons(list(inst~>name inst~>libName inst~>cellName inst~>viewName path mag parameterized reverse(termRows)) rows)))
       sprintf(nil "%L" reverse(rows))) dbClose(cv))

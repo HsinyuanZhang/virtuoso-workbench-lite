@@ -391,6 +391,57 @@ def test_symbol_metadata_requires_name_library_cell_and_unit_scale(demo):
     assert "master~>superMaster" in server.SYMBOL_METADATA_QUERY
 
 
+def _skill_parentheses_balanced(source):
+    depth = 0
+    quoted = False
+    escaped = False
+    for char in source:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0 and not quoted
+
+
+def _skill_parenthesis_depth_at(source, marker):
+    depth = 0
+    quoted = False
+    escaped = False
+    for char in source[: source.index(marker)]:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+    return depth
+
+
+def test_symbol_metadata_query_is_balanced_and_closes_pin_loops():
+    query = server.SYMBOL_METADATA_QUERY.replace("@LIB@", "generic").replace("@CELL@", "nmos")
+    assert _skill_parentheses_balanced('list(") (", 1)')
+    assert _skill_parentheses_balanced(query)
+    assert _skill_parenthesis_depth_at(query, "anchors=nil") == _skill_parenthesis_depth_at(query, "termRows=cons")
+
+
 def test_demo_revision_is_unchanged_by_presentation_metadata(demo):
     original = server.revision(demo)
     assert original == "sha256:9dc6c44a3ae6b4603fa36ec0326da3be0bf1bb8adbbd1daee2ca7543e87c1200"
