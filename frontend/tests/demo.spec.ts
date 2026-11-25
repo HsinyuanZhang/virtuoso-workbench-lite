@@ -184,6 +184,39 @@ test("unapplied parameter rows survive connect edits for the same instance", asy
   await screenshot(page, info, "parameter-input-preserved.png");
 });
 
+test("discarded parameter rows reset on reopen, remove, and save", async ({ page }) => {
+  await page.goto("/");
+  const names = page.getByRole("textbox", { name: "Parameter name", exact: true });
+  const values = page.getByRole("textbox", { name: "Parameter value", exact: true });
+  const apply = page.getByRole("button", { name: "Add parameters", exact: true });
+  const fill = async () => {
+    await names.fill("width");
+    await values.fill("2u");
+  };
+  const blank = async () => {
+    await expect(names).toHaveValue("");
+    await expect(values).toHaveValue("");
+  };
+
+  await fill();
+  const opened = page.waitForResponse((reply) => reply.url().endsWith("/api/demo"));
+  await page.locator("#open-demo").click();
+  await opened;
+  await blank();
+
+  await fill();
+  await apply.click();
+  await page.getByRole("button", { name: "Remove change 1", exact: true }).click();
+  await blank();
+
+  await fill();
+  await apply.click();
+  await page.getByLabel("Title", { exact: true }).fill("Store parameter edit");
+  await save(page, false);
+  await expect(page.locator("#draft-changes > li")).toHaveCount(0);
+  await blank();
+});
+
 test("flip previews MN1 geometry, reports broken wiring, toggles back, and submits", async ({ page }, info) => {
   await page.goto("/");
   await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");

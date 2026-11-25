@@ -373,7 +373,11 @@ function renderDraft() {
     remove.type = "button";
     remove.disabled = saving;
     remove.setAttribute("aria-label", `Remove change ${index + 1}`);
-    remove.addEventListener("click", () => { draft = draft.filter((_, position) => position !== index); renderDraft(); });
+    remove.addEventListener("click", () => {
+      draft = draft.filter((_, position) => position !== index);
+      if (change.op === "set-parameters" && change.instance === state.instance) renderParameters(true);
+      renderDraft();
+    });
     entry.append(remove);
     return entry;
   }));
@@ -424,6 +428,7 @@ async function open(path: string) {
     state.net = null;
     state.endpoints = [];
     draft = [];
+    renderParameters(true);
     for (const field of ["title", "simulation", "acceptance", "note"] as const) element(field).value = "";
     element("net-search").value = "";
     element("cell-title").textContent = snapshot.cell;
@@ -539,7 +544,7 @@ async function saveDraft(submit: boolean): Promise<void> {
     if (generation === state.request) {
       draft = [];
       for (const field of ["title", "simulation", "acceptance", "note"] as const) element(field).value = "";
-      renderParameters();
+      renderParameters(true);
     }
     await requests.select(request.id);
     await requests.refresh();
