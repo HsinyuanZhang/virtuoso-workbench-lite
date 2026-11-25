@@ -76,6 +76,20 @@ def set_state(store, identifier, state):
         store.write(request)
 
 
+def test_submit_rejects_stale_saved_draft(store, request_payload):
+    draft = store.create(request_payload)
+    current = store.snapshot_reader(draft["target"])
+    changed = {**current, "wires": current["wires"][1:]}
+    store.snapshot_reader = lambda _: changed
+
+    with pytest.raises(RequestError, match="schematic changed") as error:
+        store.human(draft["id"], "submit")
+    assert error.value.code == "stale-revision"
+    assert store.show(draft["id"]) == draft
+    with pytest.raises(RequestError, match="No request is available"):
+        store.claim(None, "worker", "pytest")
+
+
 @pytest.mark.parametrize("action,state", [(a, s) for a in HUMAN for s in STATUSES])
 def test_every_human_transition(store, request_payload, action, state):
     identifier, token = claimed(store, request_payload)

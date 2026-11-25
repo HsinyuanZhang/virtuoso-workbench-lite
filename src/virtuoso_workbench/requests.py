@@ -465,6 +465,10 @@ class RequestStore:
             destination = HUMAN.get(action, {}).get(request["status"])
             if not destination:
                 raise conflict("This human action is not allowed in the current state.")
+            if action == "submit" and request["base_revision"] != revision(self.snapshot_reader(request["target"])):
+                raise RequestError(
+                    "The schematic changed. Read a new snapshot and create a new draft.", "stale-revision", 6
+                )
             if reviewed_event is not None and action in ("approve", "accept"):
                 kind = "plan" if action == "approve" else "result"
                 current = next(
