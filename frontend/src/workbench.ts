@@ -2,7 +2,7 @@ import "./workbench.css";
 import { buildScene, collectNets, countLabel, segmentDistance } from "./logic";
 import type { Point, Port, Snapshot, State, Hit } from "./types";
 import { palette } from "./palette";
-import { appendChange, buildDraft, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
+import { appendChange, buildDraft, draftEndpointNets, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
 import type { DraftChange } from "./requests";
 import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
@@ -345,14 +345,17 @@ function renderDraft() {
   }
   element("flip-horizontal").disabled = !state.instance || saving;
   const endpoints = state.endpoints;
+  const endpointNets = state.snapshot ? draftEndpointNets(state.snapshot, draft, endpoints.map((port) => ({
+    instance: port.instance, terminal: port.name,
+  }))) : [];
   element("wire-status").textContent = endpoints.length === 0 ? "Select two instance terminals to draft a wire."
     : endpoints.length === 1 ? "Select the other endpoint." : "Review this proposed connection.";
-  element("endpoints").replaceChildren(...endpoints.map((port) => item("li", `${port.instance}.${port.name} · ${port.net ?? "Open"}`)));
+  element("endpoints").replaceChildren(...endpoints.map((port, index) => item("li", `${port.instance}.${port.name} · ${endpointNets[index] ?? "Open"}`)));
   const effect = element("wire-effect");
   effect.textContent = "";
   effect.classList.remove("warning");
   if (endpoints.length === 2) {
-    const [left, right] = endpoints.map((port) => port.net);
+    const [left, right] = endpointNets;
     if (left && right && left !== right) {
       effect.textContent = `Merges distinct nets ${left} and ${right}. Review both nets before routing.`;
       effect.classList.add("warning");

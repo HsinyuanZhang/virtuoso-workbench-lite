@@ -56,6 +56,37 @@ export function appendChange(changes: DraftChange[], change: DraftChange): Draft
   return [...changes, change];
 }
 
+export function draftEndpointNets(snapshot: Snapshot, changes: DraftChange[], endpoints: Endpoint[]): (string | null)[] {
+  const instances = new Map(snapshot.instances.map((instance) => [
+    instance.name,
+    new Map(instance.terminals.map((terminal) => [terminal.name, { net: terminal.net }])),
+  ]));
+  const members = [
+    ...[...instances.values()].flatMap((terminals) => [...terminals.values()]),
+    ...[...snapshot.pins, ...snapshot.wires].map(({ net }) => ({ net })),
+  ];
+  const terminal = (endpoint: Endpoint) => instances.get(endpoint.instance)?.get(endpoint.terminal);
+  for (const change of changes) {
+    if (change.op !== "connect") continue;
+    const left = terminal(change.endpoints[0]), right = terminal(change.endpoints[1]);
+    if (!left || !right) continue;
+    const affected = new Set([left.net, right.net].filter((net): net is string => Boolean(net)));
+    let net = change.net ?? [...affected].sort()[0];
+    if (!net) {
+      const used = new Set(members.map((member) => member.net));
+      let suffix = 1;
+      while (used.has(`vwb_net_${suffix}`)) suffix++;
+      net = `vwb_net_${suffix}`;
+    }
+    if (change.net) affected.add(change.net);
+    for (const member of members) {
+      if (member.net && affected.has(member.net)) member.net = net;
+    }
+    left.net = right.net = net;
+  }
+  return endpoints.map((endpoint) => terminal(endpoint)?.net ?? null);
+}
+
 export function buildDraft(snapshot: Snapshot, changes: DraftChange[], fields: { title: string; simulation: string; acceptance: string; note: string }, submit: boolean) {
   if (!fields.title.trim() || fields.title.length > 120) throw new Error("Enter a title of 1–120 characters.");
   if (!changes.length || changes.length > 200) throw new Error("Add 1–200 changes.");

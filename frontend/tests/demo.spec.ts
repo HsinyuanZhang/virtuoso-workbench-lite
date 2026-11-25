@@ -217,6 +217,23 @@ test("discarded parameter rows reset on reopen, remove, and save", async ({ page
   await blank();
 });
 
+test("a later connection warns about nets assigned by the draft", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#instances").selectOption("MN3");
+  const terminal = (label: RegExp) => page.locator("#terminal-list button").filter({ hasText: label });
+  await terminal(/^B/).click();
+  await terminal(/^SVSS$/).click();
+  await expect(page.locator("#wire-effect")).toHaveText("Attaches the open terminal to VSS.");
+  await page.getByRole("button", { name: "Add connect", exact: true }).click();
+
+  await terminal(/^B/).click();
+  await terminal(/^GVBIAS$/).click();
+  await expect(page.locator("#wire-effect")).toContainText("Merges distinct nets VSS and VBIAS.");
+  await expect(page.locator("#endpoints")).toContainText("MN3.B · VSS");
+  await page.getByRole("button", { name: "Remove change 1", exact: true }).click();
+  await expect(page.locator("#wire-effect")).toHaveText("Attaches the open terminal to VBIAS.");
+});
+
 test("flip previews MN1 geometry, reports broken wiring, toggles back, and submits", async ({ page }, info) => {
   await page.goto("/");
   await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");
