@@ -22,6 +22,7 @@ from .server import NAME, review_wire, revision
 
 SCHEMA = "virtuoso-workbench/design-request-v1"
 IDENTIFIER = re.compile(r"req-[0-9a-f]{12}")
+TERMINAL_NAME = re.compile(r"[A-Za-z0-9_.$+!@-]+(?:<[0-9]+(?::[0-9]+)?>)?")
 HUMAN: dict[str, dict[str, str]] = {
     "submit": {"draft": "submitted"},
     "cancel": dict.fromkeys(("draft", "submitted", "claimed", "planned", "approved"), "cancelled"),
@@ -65,6 +66,13 @@ def name(value: Any) -> str:
     value = text(value, "Name", 128, 1)
     if not NAME.fullmatch(value):
         raise RequestError("Invalid schematic name.")
+    return value
+
+
+def terminal_name(value: Any) -> str:
+    value = text(value, "Terminal name", 128, 1)
+    if not TERMINAL_NAME.fullmatch(value):
+        raise RequestError("Invalid terminal name.")
     return value
 
 
@@ -137,13 +145,13 @@ def apply_changes(
                 raise RequestError("The instance does not exist at this point in the request.")
             return selected
 
-        def terminal(selected: dict[str, Any], terminal_name: Any) -> dict[str, Any]:
-            terminal_name = name(terminal_name)
+        def terminal(selected: dict[str, Any], value: Any) -> dict[str, Any]:
+            key = terminal_name(value)
             for candidate in selected["terminals"]:
-                if candidate["name"] == terminal_name:
+                if candidate["name"] == key:
                     return candidate
             if preview and selected["name"] in unknown:
-                candidate = {"name": terminal_name, "net": None, "xy": None}
+                candidate = {"name": key, "net": None, "xy": None}
                 selected["terminals"].append(candidate)
                 return candidate
             raise RequestError("The terminal does not exist on the instance.")
@@ -154,7 +162,7 @@ def apply_changes(
             for endpoint in endpoints:
                 obj(endpoint, ("instance", "terminal"))
                 name(endpoint["instance"])
-                name(endpoint["terminal"])
+                terminal_name(endpoint["terminal"])
                 if preview:
                     selected = instances.get(endpoint["instance"])
                     if selected is None:

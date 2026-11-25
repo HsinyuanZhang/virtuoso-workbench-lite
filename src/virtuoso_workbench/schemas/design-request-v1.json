@@ -37,7 +37,8 @@
     "identity": {"type": "string", "minLength": 1, "maxLength": 128},
     "time": {"type": "string", "format": "date-time", "pattern": "Z$"},
     "parameters": {"type": "object", "maxProperties": 64, "propertyNames": {"$ref": "#/$defs/name"}, "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 64}},
-    "endpoint": {"type": "object", "additionalProperties": false, "required": ["instance", "terminal"], "properties": {"instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/name"}}},
+    "terminal_name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.$+!@-]+(?:<[0-9]+(?::[0-9]+)?>)?$"},
+    "endpoint": {"type": "object", "additionalProperties": false, "required": ["instance", "terminal"], "properties": {"instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/terminal_name"}}},
     "change": {"oneOf": [
       {"type": "object", "additionalProperties": false, "required": ["op", "endpoints", "outcome", "affected_nets", "affected_top_level_pins"], "properties": {
         "op": {"const": "connect"}, "endpoints": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/endpoint"}},
@@ -47,7 +48,7 @@
         "affected_top_level_pins": {"type": "array", "items": {"type": "string"}}
       }},
       {"type": "object", "additionalProperties": false, "required": ["op", "instance", "from_orientation", "to_orientation"], "properties": {"op": {"const": "flip-horizontal"}, "instance": {"$ref": "#/$defs/name"}, "from_orientation": {"enum": ["R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"]}, "to_orientation": {"enum": ["R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"]}}},
-      {"type": "object", "additionalProperties": false, "required": ["op", "instance", "terminal"], "properties": {"op": {"const": "disconnect"}, "instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/name"}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "instance", "terminal"], "properties": {"op": {"const": "disconnect"}, "instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/terminal_name"}}},
       {"type": "object", "additionalProperties": false, "required": ["op", "name", "library", "cell", "view", "parameters"], "properties": {"op": {"const": "add-instance"}, "name": {"$ref": "#/$defs/name"}, "library": {"$ref": "#/$defs/name"}, "cell": {"$ref": "#/$defs/name"}, "view": {"$ref": "#/$defs/name", "default": "symbol"}, "parameters": {"$ref": "#/$defs/parameters"}}},
       {"type": "object", "additionalProperties": false, "required": ["op", "name"], "properties": {"op": {"const": "remove-instance"}, "name": {"$ref": "#/$defs/name"}}},
       {"type": "object", "additionalProperties": false, "required": ["op", "instance", "parameters"], "properties": {"op": {"const": "set-parameters"}, "instance": {"$ref": "#/$defs/name"}, "parameters": {"$ref": "#/$defs/parameters"}}},

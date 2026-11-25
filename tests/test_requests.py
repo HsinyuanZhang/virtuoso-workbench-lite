@@ -90,6 +90,20 @@ def test_submit_rejects_stale_saved_draft(store, request_payload):
         store.claim(None, "worker", "pytest")
 
 
+def test_connect_existing_bus_terminal(store, demo, request_payload):
+    demo["instances"][0]["terminals"][1]["name"] = "A<0>"
+    request_payload["revision"] = app.revision(demo)
+    endpoints = request_payload["changes"][0]["endpoints"]
+    endpoints[0]["terminal"] = "A<0>"
+    saved = store.create(request_payload)
+    schema = Path(app.__file__).parent / "schemas" / "design-request-v1.json"
+    jsonschema.Draft202012Validator(json.loads(schema.read_text())).validate(store.read(saved["id"]))
+    assert saved["changes"][0]["endpoints"][0]["terminal"] == "A<0>"
+    endpoints[0]["terminal"] = "A<1>"
+    with pytest.raises(app.WorkbenchError, match="terminal no longer exists"):
+        store.create(request_payload)
+
+
 @pytest.mark.parametrize("action,state", [(a, s) for a in HUMAN for s in STATUSES])
 def test_every_human_transition(store, request_payload, action, state):
     identifier, token = claimed(store, request_payload)
