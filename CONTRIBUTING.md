@@ -36,7 +36,23 @@ Review the staged diff before committing; do not commit generated assets.
 
 Keep changes small and test normal, empty, and error cases. Use fake Bridge
 responses, never private designs or licensed EDA tools. UI changes need browser
-tests and visual review. Do not change safety behavior in packaging-only work.
+tests and visual review. Request storage tests require POSIX flock. The dev-only
+jsonschema dependency checks persisted examples; runtime validation uses the
+standard library. Keep docs/agent-protocol.md and its packaged copy identical.
+
+The Playwright demo tests use the real local CLI to claim requests, send plans,
+and send synthetic results. They do not edit OA. Each run uses a new state root
+under `.artifacts`. Set `VWB_SCREENSHOT_DIR` to save the draft and approval
+screenshots in another existing directory. The palette test scans all source CSS
+and TypeScript. Keep color literals in the CSS custom properties and `palette.ts`.
+Only the Virtuoso red, blue, and green hues are allowed. Black, white, neutral
+grays (equal RGB channels), and alpha variants are allowed. Keep flip matrix and
+geometry tests in Python and TypeScript consistent with `docs/orientation.md`.
+
+Connectivity checks run only in Python. The browser sends logical preview requests
+to the backend. Keep snapshot annotations out of revision hashes. Use the synthetic
+`problem_snapshot` fixture and geometry tests for new rules. Document tolerance
+changes in `docs/connectivity-checks.md`. Findings must not disable Submit.
 
 This project uses MIT licensing. Submit only code and fixtures you may publish,
 and retain required third-party notices. Report suspected secrets privately

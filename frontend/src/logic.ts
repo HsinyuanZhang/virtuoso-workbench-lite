@@ -30,9 +30,10 @@ export function buildScene(snapshot: Snapshot): Scene {
   for (const instance of snapshot.instances) {
     const measured = instance.terminals.map((terminal) => terminal.xy).filter((xy): xy is Point => xy !== null);
     const area = bounds(measured.length ? measured : instance.bbox);
+    const center = instance.bbox.length === 2 ? bounds(instance.bbox) : area;
     const hasBounds = Number.isFinite(area.left);
     const [x, y] = hasBounds
-      ? [(area.left + area.right) / 2, (area.top + area.bottom) / 2]
+      ? [(center.left + center.right) / 2, (center.top + center.bottom) / 2]
       : (instance.xy ?? [fallbackCount++ * unit * 2, 0]);
     const nativeWidth = hasBounds ? area.right - area.left : 0;
     const nativeHeight = hasBounds ? area.top - area.bottom : 0;

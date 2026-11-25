@@ -4,6 +4,7 @@ import sys
 
 import pytest
 
+from virtuoso_workbench import cli
 from virtuoso_workbench import server as app
 
 
@@ -53,16 +54,16 @@ def test_live_http_uses_fake_reader(http_server):
         ("127.0.0.1", "http://127.0.0.1", 201),
     ],
 )
-def test_origin_and_host_checks(http_server, payload, host, origin, status):
+def test_origin_and_host_checks(http_server, request_payload, host, origin, status):
     headers = {"Host": host, "Content-Type": "application/json"}
     if origin:
         headers["Origin"] = origin
-    assert request(http_server, "POST", "/api/handoffs", json.dumps(payload), headers)[0] == status
+    assert request(http_server, "POST", "/api/requests", json.dumps(request_payload), headers)[0] == status
     if status != 201:
         assert not http_server.state_dir.exists()
 
 
-@pytest.mark.parametrize("length", ["0", "-1", "8193", "invalid"])
+@pytest.mark.parametrize("length", ["0", "-1", "65537", "invalid"])
 def test_request_size_limits(http_server, length):
     headers = {
         "Host": "localhost",
@@ -70,18 +71,17 @@ def test_request_size_limits(http_server, length):
         "Content-Type": "application/json",
         "Content-Length": length,
     }
-    expected = 502 if length == "invalid" else 400
-    assert request(http_server, "POST", "/api/handoffs", b"", headers)[0] == expected
+    assert request(http_server, "POST", "/api/requests", b"", headers)[0] == 400
     assert not http_server.state_dir.exists()
 
 
-def test_post_json_and_revision_errors(http_server, payload):
+def test_post_json_and_revision_errors(http_server, request_payload):
     headers = {"Host": "localhost", "Origin": "http://localhost", "Content-Type": "application/json"}
-    assert request(http_server, "POST", "/api/handoffs", "{bad", headers)[0] == 400
-    payload["revision"] = "stale"
-    assert request(http_server, "POST", "/api/handoffs", json.dumps(payload), headers)[0] == 409
+    assert request(http_server, "POST", "/api/requests", "{bad", headers)[0] == 400
+    request_payload["revision"] = "stale"
+    assert request(http_server, "POST", "/api/requests", json.dumps(request_payload), headers)[0] == 409
     headers["Content-Type"] = "text/plain"
-    assert request(http_server, "POST", "/api/handoffs", "{}", headers)[0] == 400
+    assert request(http_server, "POST", "/api/requests", "{}", headers)[0] == 400
     assert not http_server.state_dir.exists()
 
 
@@ -112,13 +112,13 @@ def test_cli_preserves_bind_flags_and_bridge_options(monkeypatch, options, expec
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(app, "WorkbenchServer", FakeServer)
     monkeypatch.setattr(
-        app.subprocess, "check_output", lambda *args, **kwargs: '{"network":{"IPAddress":"172.18.0.2"}}'
+        cli.subprocess, "check_output", lambda *args, **kwargs: '{"network":{"IPAddress":"172.18.0.2"}}'
     )
     monkeypatch.setattr(app, "read_snapshot", lambda *args: calls.append(args))
     monkeypatch.setattr(sys, "argv", ["vwb", *options])
     app.main()
     assert calls == [("examples", "amp", expected_host, 65432)]
-    assert instances[0].state_dir == tmp_path / ".workbench" / "handoffs"
+    assert instances[0].state_dir == tmp_path / ".workbench"
 
 
 def test_cli_review_demo_and_stale_revision(monkeypatch, demo, payload, tmp_path, capsys):
@@ -130,4 +130,4 @@ def test_cli_review_demo_and_stale_revision(monkeypatch, demo, payload, tmp_path
     path.write_text(json.dumps({**receipt["plan"], "base_revision": "stale"}))
     with pytest.raises(SystemExit) as exc:
         app.main()
-    assert exc.value.code == 1
+    assert exc.value.code == 6

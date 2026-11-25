@@ -28,6 +28,16 @@ def payload(demo, endpoints):
 
 
 @pytest.fixture
+def request_payload(demo, endpoints):
+    return {
+        "target": {key: demo[key] for key in ("source", "library", "cell", "view")},
+        "revision": app.revision(demo),
+        "title": "Review the merge",
+        "changes": [{"op": "connect", "endpoints": endpoints}],
+    }
+
+
+@pytest.fixture
 def http_server(demo, tmp_path):
     with app.WorkbenchServer(("127.0.0.1", 0), app.Handler) as server:
         server.demo = demo
