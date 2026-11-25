@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:virtuoso-workbench:schemas:library-symbols-v1",
+  "title": "Workbench library symbol package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "library", "coordinate_system", "symbols", "exported_at", "digest"],
+  "properties": {
+    "schema": {"const": "virtuoso-workbench/library-symbols-v1"},
+    "library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "identity"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9_.$+!@-]{1,128}$"},
+        "identity": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "coordinate_system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axes", "units"],
+      "properties": {
+        "axes": {"const": "x-right-y-up"},
+        "units": {"const": "OA user units"},
+        "scale": {"const": 1},
+        "grid": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000000000}
+      }
+    },
+    "symbols": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/symbol"}
+    },
+    "source_version": {"type": "string", "maxLength": 128},
+    "exported_at": {"type": "string", "format": "date-time"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "point": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000},
+        {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "bbox": {
+      "type": "array",
+      "prefixItems": [{"$ref": "#/$defs/point"}, {"$ref": "#/$defs/point"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "primitive": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "points", "layer", "purpose"],
+          "properties": {"type": {"const": "line"}, "points": {"type": "array", "minItems": 2, "maxItems": 10000, "items": {"$ref": "#/$defs/point"}}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "bbox", "layer", "purpose"],
+          "properties": {"type": {"const": "rect"}, "bbox": {"$ref": "#/$defs/bbox"}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "points", "layer", "purpose"],
+          "properties": {"type": {"const": "polygon"}, "points": {"type": "array", "minItems": 3, "maxItems": 10000, "items": {"$ref": "#/$defs/point"}}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "bbox", "layer", "purpose"],
+          "properties": {"type": {"const": "ellipse"}, "bbox": {"$ref": "#/$defs/bbox"}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "bbox", "start_angle", "stop_angle", "layer", "purpose"],
+          "properties": {"type": {"const": "arc"}, "bbox": {"$ref": "#/$defs/bbox"}, "start_angle": {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000}, "stop_angle": {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "text", "xy", "layer", "purpose"],
+          "properties": {"type": {"const": "label"}, "text": {"type": "string", "maxLength": 4096}, "xy": {"$ref": "#/$defs/point"}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "xy", "layer", "purpose"],
+          "properties": {"type": {"const": "instance-name"}, "xy": {"$ref": "#/$defs/point"}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "source_type"],
+          "properties": {"type": {"const": "unsupported"}, "source_type": {"type": "string", "minLength": 1, "maxLength": 128}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        }
+      ]
+    },
+    "figure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bbox", "anchors"],
+      "properties": {"bbox": {"$ref": "#/$defs/bbox"}, "anchors": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {"$ref": "#/$defs/point"}}}
+    },
+    "terminal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "direction", "pin_figures"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$"},
+        "direction": {"enum": ["input", "output", "inputOutput", "tristate", "feedthrough", "unused"]},
+        "pin_figures": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/figure"}}
+      }
+    },
+    "symbol": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cell", "view", "origin", "bbox", "primitives", "terminals", "complete", "diagnostics"],
+      "properties": {
+        "cell": {"type": "string", "pattern": "^[A-Za-z0-9_.$+!@-]{1,128}$"},
+        "view": {"const": "symbol"},
+        "origin": {"$ref": "#/$defs/point"},
+        "bbox": {"$ref": "#/$defs/bbox"},
+        "primitives": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/primitive"}},
+        "terminals": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/terminal"}},
+        "complete": {"type": "boolean"},
+        "diagnostics": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 4096}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"complete": {"const": true}}, "required": ["complete"]},
+          "then": {"properties": {"primitives": {"items": {"not": {"properties": {"type": {"const": "unsupported"}}, "required": ["type"]}}}}}
+        }
+      ]
+    }
+  }
+}

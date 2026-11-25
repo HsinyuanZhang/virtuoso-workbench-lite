@@ -1,0 +1,84 @@
+{
+  "schema": "virtuoso-workbench/library-symbols-v1",
+  "library": {
+    "name": "generic",
+    "identity": "sha256:3bd471c536740424815ba4230940b8b2e3e5957f0004bddc49d4e4a26e30ff23"
+  },
+  "coordinate_system": {
+    "axes": "x-right-y-up",
+    "units": "OA user units"
+  },
+  "source_version": "synthetic-demo-v1",
+  "exported_at": "2026-11-23T00:00:00+00:00",
+  "symbols": [
+    {
+      "cell": "nmos",
+      "view": "symbol",
+      "origin": [0, 0],
+      "bbox": [[-1.8, -1.8], [1.8, 2.1]],
+      "primitives": [
+        {"type": "line", "points": [[0, -0.8], [0, 0.8]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0, -0.8], [0, -1.7]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0, 0.8], [0, 1.7]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[-1.7, 0], [-0.55, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[-0.55, -0.55], [-0.55, 0.55]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0.55, 0], [1.7, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "label", "text": "N", "xy": [0, -0.15], "layer": "drawing", "purpose": "drawing"},
+        {"type": "instance-name", "xy": [0, 2], "layer": "drawing", "purpose": "drawing"}
+      ],
+      "terminals": [
+        {"name": "S", "direction": "inputOutput", "pin_figures": [{"bbox": [[-0.1, -1.8], [0.1, -1.6]], "anchors": [[0, -1.7]]}]},
+        {"name": "D", "direction": "inputOutput", "pin_figures": [{"bbox": [[-0.1, 1.6], [0.1, 1.8]], "anchors": [[0, 1.7]]}]},
+        {"name": "G", "direction": "inputOutput", "pin_figures": [{"bbox": [[-1.8, -0.1], [-1.6, 0.1]], "anchors": [[-1.7, 0]]}]},
+        {"name": "B", "direction": "inputOutput", "pin_figures": [{"bbox": [[1.6, -0.1], [1.8, 0.1]], "anchors": [[1.7, 0]]}]}
+      ],
+      "complete": true,
+      "diagnostics": []
+    },
+    {
+      "cell": "pmos",
+      "view": "symbol",
+      "origin": [0, 0],
+      "bbox": [[-1.8, -1.8], [1.8, 2.1]],
+      "primitives": [
+        {"type": "line", "points": [[0, -0.8], [0, 0.8]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0, -0.8], [0, -1.7]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0, 0.8], [0, 1.7]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[-1.7, 0], [-0.85, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "ellipse", "bbox": [[-0.85, -0.2], [-0.45, 0.2]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[-0.35, -0.55], [-0.35, 0.55]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[0.55, 0], [1.7, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "label", "text": "P", "xy": [0, -0.15], "layer": "drawing", "purpose": "drawing"},
+        {"type": "instance-name", "xy": [0, 2], "layer": "drawing", "purpose": "drawing"}
+      ],
+      "terminals": [
+        {"name": "S", "direction": "inputOutput", "pin_figures": [{"bbox": [[-0.1, 1.6], [0.1, 1.8]], "anchors": [[0, 1.7]]}]},
+        {"name": "D", "direction": "inputOutput", "pin_figures": [{"bbox": [[-0.1, -1.8], [0.1, -1.6]], "anchors": [[0, -1.7]]}]},
+        {"name": "G", "direction": "inputOutput", "pin_figures": [{"bbox": [[-1.8, -0.1], [-1.6, 0.1]], "anchors": [[-1.7, 0]]}]},
+        {"name": "B", "direction": "inputOutput", "pin_figures": [{"bbox": [[1.6, -0.1], [1.8, 0.1]], "anchors": [[1.7, 0]]}]}
+      ],
+      "complete": true,
+      "diagnostics": []
+    },
+    {
+      "cell": "resistor",
+      "view": "symbol",
+      "origin": [0, 0],
+      "bbox": [[-3, -1], [3, 1.5]],
+      "primitives": [
+        {"type": "line", "points": [[-3, 0], [-1, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[-1, 0], [-0.5, 0.75], [0.5, -0.75], [1, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "line", "points": [[1, 0], [3, 0]], "layer": "drawing", "purpose": "drawing"},
+        {"type": "label", "text": "R", "xy": [0, 1.2], "layer": "drawing", "purpose": "drawing"},
+        {"type": "instance-name", "xy": [0, 1.45], "layer": "drawing", "purpose": "drawing"}
+      ],
+      "terminals": [
+        {"name": "A", "direction": "inputOutput", "pin_figures": [{"bbox": [[-3.1, -0.1], [-2.9, 0.1]], "anchors": [[-3, 0]]}]},
+        {"name": "B", "direction": "inputOutput", "pin_figures": [{"bbox": [[2.9, -0.1], [3.1, 0.1]], "anchors": [[3, 0]]}]}
+      ],
+      "complete": true,
+      "diagnostics": []
+    }
+  ],
+  "digest": "sha256:a9323288dd95d8aed539bbb67bcedae14c906bd0d5001136bccdfbe5309cc319"
+}

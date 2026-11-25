@@ -15,6 +15,7 @@ from typing import Any, Callable, NoReturn
 from . import server as app
 from .checks import check_preview, connectivity_checks
 from .requests import AGENT, HUMAN, SCHEMA, RequestError, RequestStore, obj, os_user, text
+from .symbols import SymbolPackageError, export_package, load_package, load_packages, summarize_package, write_package
 
 
 def emit(value: dict[str, Any]) -> None:
@@ -43,6 +44,7 @@ def parser() -> Parser:
     common.add_argument("--harness")
     common.add_argument("--token")
     common.add_argument("--lease", type=int)
+    common.add_argument("--symbol-package", action="append", type=Path)
     root = Parser(description=__doc__, parents=[common])
     commands = root.add_subparsers(dest="command")
     commands.add_parser("serve", parents=[common])
@@ -76,6 +78,17 @@ def parser() -> Parser:
                 command.add_argument("--comment", default="")
             if action == "fail":
                 command.add_argument("--message", required=True)
+    symbols = commands.add_parser("symbols", parents=[common])
+    symbol_actions = symbols.add_subparsers(dest="symbol_action", required=True)
+    export = symbol_actions.add_parser("export", parents=[common])
+    export.add_argument("--library", required=True)
+    export.add_argument("--cell", action="append", required=True)
+    export.add_argument("--view", default="symbol")
+    export.add_argument("--output", type=Path, required=True)
+    export.add_argument("--source-version")
+    export.add_argument("--force", action="store_true")
+    inspect = symbol_actions.add_parser("inspect", parents=[common])
+    inspect.add_argument("--file", type=Path, required=True)
     return root
 
 
@@ -113,7 +126,9 @@ def read_master_terminals(change: dict[str, Any], host: str | None, port: int) -
     return records[1:-1]
 
 
-def context(arguments: argparse.Namespace) -> tuple[dict[str, Any], Callable[[str, str], dict[str, Any]], RequestStore]:
+def context(
+    arguments: argparse.Namespace,
+) -> tuple[dict[str, Any], Callable[[str, str], dict[str, Any]], RequestStore, tuple[bytes, ...]]:
     host = arguments.bridge_host
     if arguments.bridge_docker:
         inspected = subprocess.check_output(
@@ -135,10 +150,16 @@ def context(arguments: argparse.Namespace) -> tuple[dict[str, Any], Callable[[st
             raise RequestError("The container must have one IPv4 address, or supply --bridge-host.")
         host = addresses.pop()
     demo = json.loads((app.ROOT / "demo.json").read_text(encoding="utf-8"))
+    packages = tuple(
+        json.dumps(package, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        for package in load_packages(arguments.symbol_package or [])
+    )
     bridge_lock = Lock()
 
     def read_live(library: str, cell: str) -> dict[str, Any]:
         with bridge_lock:
+            if packages:
+                return app.read_snapshot(library, cell, host, arguments.bridge_port, include_symbol_metadata=True)
             return app.read_snapshot(library, cell, host, arguments.bridge_port)
 
     def snapshot(target: dict[str, Any]) -> dict[str, Any]:
@@ -148,7 +169,50 @@ def context(arguments: argparse.Namespace) -> tuple[dict[str, Any], Callable[[st
         with bridge_lock:
             return read_master_terminals(change, host, arguments.bridge_port)
 
-    return demo, read_live, RequestStore(arguments.state_dir.resolve(), snapshot, master)
+    return demo, read_live, RequestStore(arguments.state_dir.resolve(), snapshot, master), packages
+
+
+def execute_symbols(arguments: argparse.Namespace, parse: Parser) -> None:
+    if arguments.symbol_action == "inspect":
+        emit(summarize_package(load_package(arguments.file)))
+        return
+    host = arguments.bridge_host
+    if arguments.bridge_docker:
+        inspected = subprocess.check_output(
+            [
+                "docker",
+                "inspect",
+                "--type",
+                "container",
+                "--format",
+                "{{json .NetworkSettings.Networks}}",
+                arguments.bridge_docker,
+            ],
+            text=True,
+            timeout=10,
+            stderr=subprocess.PIPE,
+        )
+        addresses = {network["IPAddress"] for network in json.loads(inspected).values() if network["IPAddress"]}
+        if len(addresses) != 1:
+            raise RequestError("The container must have one IPv4 address, or supply --bridge-host.")
+        host = addresses.pop()
+    if not host:
+        raise RequestError("Symbol export needs --bridge-host or --bridge-docker.")
+    try:
+        package = export_package(
+            arguments.library,
+            arguments.cell,
+            host,
+            arguments.bridge_port,
+            arguments.view,
+            arguments.source_version,
+        )
+        write_package(arguments.output, package, arguments.force)
+    except SymbolPackageError as error:
+        raise RequestError(str(error), "symbol-package", 5) from error
+    except OSError as error:
+        raise RequestError("Could not write symbol package.", "symbol-package", 5) from error
+    emit({**summarize_package(package), "output": str(arguments.output)})
 
 
 def import_handoff(payload: Any, store: RequestStore) -> dict[str, Any]:
@@ -173,7 +237,10 @@ def import_handoff(payload: Any, store: RequestStore) -> dict[str, Any]:
 
 
 def execute(arguments: argparse.Namespace, parse: Parser) -> None:
-    demo, read_live, store = context(arguments)
+    if arguments.command == "symbols":
+        execute_symbols(arguments, parse)
+        return
+    demo, read_live, store, packages = context(arguments)
     if arguments.review:
         if arguments.command not in (None, "serve"):
             parse.error("--review cannot be combined with a subcommand.")
@@ -194,6 +261,7 @@ def execute(arguments: argparse.Namespace, parse: Parser) -> None:
     elif arguments.command in (None, "serve"):
         with app.WorkbenchServer(("127.0.0.1", arguments.port), app.Handler) as server:
             server.demo, server.read_live, server.state_dir = demo, read_live, store.state_dir
+            server.symbol_packages = packages
             if store.master_reader:
                 server.read_master = store.master_reader
             emit({"ok": True, "url": f"http://127.0.0.1:{server.server_port}"})
@@ -293,6 +361,7 @@ def main() -> None:
         "bridge_port": 65432,
         "bridge_host": None,
         "bridge_docker": None,
+        "symbol_package": [],
         "review": None,
         "token": None,
     }

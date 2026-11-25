@@ -42,6 +42,15 @@ def test_live_http_uses_fake_reader(http_server):
     assert json.loads(body)["source"] == "virtuoso"
 
 
+def test_symbol_api_only_serves_configured_packages(http_server):
+    package = {"schema": "synthetic-package"}
+    http_server.symbol_packages = (json.dumps(package).encode("utf-8"),)
+    status, _, body = request(http_server, "GET", "/api/symbols")
+    assert status == 200
+    assert json.loads(body) == {"packages": [package]}
+    assert request(http_server, "GET", "/api/symbols", headers={"Host": "remote.example"})[0] == 403
+
+
 @pytest.mark.parametrize(
     "host,origin,status",
     [

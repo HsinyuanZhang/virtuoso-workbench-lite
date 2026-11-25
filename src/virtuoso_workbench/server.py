@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from .checks import check_preview, connectivity_checks
+from .symbols import SymbolPackageError, decode_bridge_skill_output, library_identity, parse_skill_value
 
 if TYPE_CHECKING:
     from .requests import RequestStore
@@ -25,6 +26,32 @@ NAME = re.compile(r"[A-Za-z0-9_.$+!@-]{1,128}")
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 PAIR = re.compile(rf"({NUMBER})(?:\s*:\s*|\s+)({NUMBER})")
 PLAN_SCHEMA = "circuit-workbench/wire-intent-v1"
+
+SYMBOL_METADATA_QUERY = r"""let((cv rows lib path inst transform mag parameterized termRows anchors pin fig bb)
+  cv=dbOpenCellViewByType("@LIB@" "@CELL@" "schematic" "schematic" "r")
+  if(cv then unwindProtect(
+    progn(rows=nil
+      foreach(inst cv~>instances unless(inst~>purpose == "pin"
+        lib=ddGetObj(inst~>libName)
+        path=when(lib lib~>readPath)
+        transform=inst~>transform
+        mag=when(transform caddr(transform))
+        parameterized=when(inst~>master~>superMaster t)
+        termRows=nil
+        foreach(term inst~>master~>terminals
+          anchors=nil
+          foreach(pin term~>pins
+            foreach(fig pin~>figs
+              bb=when(fig~>bBox dbTransformBBox(fig~>bBox transform))
+              when(bb anchors=cons(list((xCoord(car(bb)) + xCoord(cadr(bb))) / 2.0
+                                        (yCoord(car(bb)) + yCoord(cadr(bb))) / 2.0) anchors))))
+          termRows=cons(list(term~>name reverse(anchors)) termRows))
+        rows=cons(list(inst~>name inst~>libName inst~>cellName inst~>viewName path mag parameterized reverse(termRows)) rows)))
+      sprintf(nil "%L" reverse(rows))) dbClose(cv))
+    else sprintf(nil "%L" list("MISSING"))))"""
+
+SYMBOL_PRESENTATION_FIELDS = {"master_view", "library_identity", "symbol_metadata_error"}
+MAX_SOURCE_PIN_ANCHORS = 100000
 
 # Uses the same OA attributes as the Bridge's schematic reader and wire helper.
 SNAPSHOT_QUERY = r"""
@@ -85,7 +112,16 @@ def point(raw: str) -> list[float] | None:
 
 
 def revision(snapshot: dict[str, Any]) -> str:
-    data = json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    stable = dict(snapshot)
+    stable["instances"] = []
+    for instance in snapshot["instances"]:
+        stable_instance = {key: value for key, value in instance.items() if key not in SYMBOL_PRESENTATION_FIELDS}
+        stable_instance["terminals"] = [
+            {key: value for key, value in terminal.items() if key != "source_pin_anchors"}
+            for terminal in instance["terminals"]
+        ]
+        stable["instances"].append(stable_instance)
+    data = json.dumps(stable, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return "sha256:" + hashlib.sha256(data.encode()).hexdigest()
 
 
@@ -146,7 +182,13 @@ def validate_name(value: Any) -> str:
     return value
 
 
-def read_snapshot(library: str, cell: str, bridge_host: str | None, bridge_port: int) -> dict[str, Any]:
+def read_snapshot(
+    library: str,
+    cell: str,
+    bridge_host: str | None,
+    bridge_port: int,
+    include_symbol_metadata: bool = False,
+) -> dict[str, Any]:
     library, cell = validate_name(library), validate_name(cell)
     if not bridge_host:
         raise WorkbenchError(
@@ -158,10 +200,119 @@ def read_snapshot(library: str, cell: str, bridge_host: str | None, bridge_port:
     query = re.sub(r"@(?:LIB|CELL)@", lambda marker: values[marker[0]], SNAPSHOT_QUERY)
     with VirtuosoClient.local(host=bridge_host, port=bridge_port, timeout=15) as client:
         result = client.execute_skill(query)
+        metadata_result = None
+        metadata_query_failed = False
+        if result.ok and include_symbol_metadata:
+            try:
+                metadata_result = client.execute_skill(
+                    SYMBOL_METADATA_QUERY.replace("@LIB@", library).replace("@CELL@", cell), timeout=15
+                )
+            except Exception:
+                metadata_query_failed = True
     if not result.ok:
         detail = result.errors[0] if result.errors else "No response from CIW."
         raise RuntimeError(f"Bridge could not read the schematic: {detail}")
-    return parse_snapshot(decode_skill_output(result.output), library, cell)
+    snapshot = parse_snapshot(decode_skill_output(result.output), library, cell)
+    if include_symbol_metadata and (metadata_query_failed or metadata_result is None or not metadata_result.ok):
+        _mark_symbol_metadata_error(snapshot, "metadata-unavailable")
+    elif metadata_result is not None:
+        try:
+            rows = parse_skill_value(decode_bridge_skill_output(metadata_result.output, decode_skill_output))
+            _attach_symbol_metadata(snapshot, rows)
+        except Exception:
+            _mark_symbol_metadata_error(snapshot, "metadata-invalid")
+    return snapshot
+
+
+def _mark_symbol_metadata_error(snapshot: dict[str, Any], reason: str) -> None:
+    for instance in snapshot["instances"]:
+        instance["symbol_metadata_error"] = reason
+
+
+def _metadata_anchor_rows(value: Any) -> dict[str, list[list[float]]]:
+    if value is None:
+        return {}
+    if not isinstance(value, list):
+        raise SymbolPackageError("Bridge returned invalid source pin anchors.")
+    anchors_by_terminal: dict[str, list[list[float]]] = {}
+    anchor_count = 0
+    for row in value:
+        if not isinstance(row, list) or len(row) != 2 or not isinstance(row[0], str) or not row[0]:
+            raise SymbolPackageError("Bridge returned invalid source pin anchors.")
+        name, anchors = row
+        if name in anchors_by_terminal:
+            raise SymbolPackageError("Bridge returned duplicate source terminal metadata.")
+        if anchors is None:
+            anchors = []
+        if not isinstance(anchors, list):
+            raise SymbolPackageError("Bridge returned invalid source pin anchors.")
+        anchor_count += len(anchors)
+        if anchor_count > MAX_SOURCE_PIN_ANCHORS:
+            raise SymbolPackageError("Bridge returned too many source pin anchors.")
+        normalized = []
+        for anchor in anchors:
+            if (
+                not isinstance(anchor, list)
+                or len(anchor) != 2
+                or any(
+                    isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)) for coordinate in anchor
+                )
+                or any(not math.isfinite(float(coordinate)) for coordinate in anchor)
+                or any(abs(float(coordinate)) > 1e12 for coordinate in anchor)
+            ):
+                raise SymbolPackageError("Bridge returned invalid source pin anchors.")
+            normalized.append([float(anchor[0]), float(anchor[1])])
+        anchors_by_terminal[name] = normalized
+    return anchors_by_terminal
+
+
+def _attach_symbol_metadata(snapshot: dict[str, Any], rows: Any) -> None:
+    if rows is None:
+        rows = []
+    if not isinstance(rows, list):
+        raise SymbolPackageError("Bridge returned invalid symbol metadata.")
+    rows_by_name: dict[str, list[list[Any]]] = {}
+    for row in rows:
+        if not isinstance(row, list) or len(row) != 8 or not isinstance(row[0], str):
+            raise SymbolPackageError("Bridge returned invalid symbol metadata.")
+        rows_by_name.setdefault(row[0], []).append(row)
+    for instance in snapshot["instances"]:
+        matches = rows_by_name.get(instance["name"], [])
+        if len(matches) != 1:
+            instance["symbol_metadata_error"] = "metadata-missing" if not matches else "metadata-ambiguous"
+            continue
+        _, library, master, view, path, magnification, parameterized, terminal_rows = matches[0]
+        if library != instance["library"] or master != instance["master"]:
+            instance["symbol_metadata_error"] = "metadata-binding-mismatch"
+            continue
+        if parameterized is True:
+            instance["symbol_metadata_error"] = "unsupported-parameterized-variant"
+            continue
+        if parameterized is not None:
+            instance["symbol_metadata_error"] = "metadata-invalid-variant-status"
+            continue
+        if not isinstance(view, str) or not view or not isinstance(path, str):
+            instance["symbol_metadata_error"] = "metadata-binding-unavailable"
+            continue
+        if (
+            isinstance(magnification, bool)
+            or not isinstance(magnification, (int, float))
+            or not math.isfinite(float(magnification))
+        ):
+            instance["symbol_metadata_error"] = "metadata-invalid-magnification"
+            continue
+        if float(magnification) != 1.0:
+            instance["symbol_metadata_error"] = "unsupported-magnification"
+            continue
+        anchors_by_terminal = _metadata_anchor_rows(terminal_rows)
+        terminal_names = {terminal["name"] for terminal in instance["terminals"]}
+        if set(anchors_by_terminal) != terminal_names:
+            instance["symbol_metadata_error"] = "metadata-terminal-mismatch"
+            continue
+        instance["master_view"] = view
+        instance["library_identity"] = library_identity(path)
+        for terminal in instance["terminals"]:
+            terminal["source_pin_anchors"] = anchors_by_terminal[terminal["name"]]
 
 
 def terminal_index(snapshot: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -266,6 +417,8 @@ def save_plan(
 
 
 class WorkbenchServer(ThreadingHTTPServer):
+    symbol_packages: tuple[bytes, ...] = ()
+
     demo: dict[str, Any]
     read_live: Callable[[str, str], dict[str, Any]]
     state_dir: Path
@@ -318,6 +471,8 @@ class Handler(BaseHTTPRequestHandler):
         self.check_origin()
         target = urlsplit(self.path)
         if self.command == "GET":
+            if target.path == "/api/symbols":
+                return self.send_json({"packages": [json.loads(package) for package in self.server.symbol_packages]})
             if target.path == "/api/requests":
                 return self.send_json({"ok": True, "requests": self.server.request_store().list()})
             if re.fullmatch(r"/api/requests/[^/]+", target.path):

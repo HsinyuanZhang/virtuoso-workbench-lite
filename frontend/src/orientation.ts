@@ -20,7 +20,9 @@ export function flippedOrientation(orientation: string): string {
   const matrix = Object.hasOwn(orientations, orientation) ? orientations[orientation] : undefined;
   if (!matrix) throw new Error("Unsupported instance orientation.");
   const result = compose(orientations.MY, matrix);
-  return Object.entries(orientations).find(([, candidate]) => candidate.every((row, i) => row.every((value, j) => value === result[i][j])))![0];
+  const match = Object.entries(orientations).find(([, candidate]) => candidate.every((row, i) => row.every((value, j) => value === result[i][j])));
+  if (!match) throw new Error("Unsupported instance orientation.");
+  return match[0];
 }
 
 export function toggleFlip(changes: DraftChange[], snapshot: Snapshot, instance: string): DraftChange[] {
@@ -39,14 +41,17 @@ export function flipPreview(snapshot: Snapshot, changes: DraftChange[]): Snapsho
     for (const change of changes) {
       if (change.op !== "flip-horizontal" || change.instance !== instance.name) continue;
       if (change.from_orientation !== instance.orientation || flippedOrientation(instance.orientation) !== change.to_orientation) throw new Error("The flip does not match the current orientation.");
-      const bbox = instance.bbox;
-      const mirror = (point: Point): Point => [bbox[0][0] + bbox[1][0] - point[0], point[1]];
+      const bbox: Point[] = instance.bbox.map(([x, y]): Point => [x, y]);
       instance = { ...instance, orientation: change.to_orientation };
       if (bbox.length !== 2) continue;
-      const points = bbox.map(mirror);
+      const mirror = (point: Point): Point => [bbox[0][0] + bbox[1][0] - point[0], point[1]];
       instance = { ...instance, xy: instance.xy ? mirror(instance.xy) : null,
-        bbox: [[Math.min(...points.map(([x]) => x)), Math.min(...points.map(([, y]) => y))], [Math.max(...points.map(([x]) => x)), Math.max(...points.map(([, y]) => y))]],
-        terminals: instance.terminals.map((terminal) => ({ ...terminal, xy: terminal.xy ? mirror(terminal.xy) : null })),
+        bbox,
+        terminals: instance.terminals.map((terminal) => ({
+          ...terminal,
+          xy: terminal.xy ? mirror(terminal.xy) : null,
+          source_pin_anchors: terminal.source_pin_anchors?.map(mirror),
+        })),
       };
     }
     return instance;

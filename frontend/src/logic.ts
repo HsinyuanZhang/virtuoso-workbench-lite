@@ -1,4 +1,5 @@
-import type { Point, Snapshot, Extent, Scene, Device, Port, Terminal, Net } from "./types";
+import type { Point, Snapshot, Extent, Scene, Device, Port, Terminal, Net, LibrarySymbolPackage } from "./types";
+import { resolveSymbol, symbolWorldPoints } from "./symbol-render";
 
 export function countLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
@@ -15,7 +16,7 @@ export function bounds(coordinates: Point[]): Extent {
   return extent;
 }
 
-export function buildScene(snapshot: Snapshot): Scene {
+export function buildScene(snapshot: Snapshot, symbolPackages: LibrarySymbolPackage[] = []): Scene {
   const devices: Device[] = [];
   const extentPoints = [
     ...snapshot.wires.flatMap((wire) => wire.points),
@@ -28,6 +29,7 @@ export function buildScene(snapshot: Snapshot): Scene {
   const unit = widths[Math.floor(widths.length / 2)] ?? 1;
   let fallbackCount = 0;
   for (const instance of snapshot.instances) {
+    const resolved = resolveSymbol(instance, symbolPackages);
     const measured = instance.terminals.map((terminal) => terminal.xy).filter((xy): xy is Point => xy !== null);
     const area = bounds(measured.length ? measured : instance.bbox);
     const center = instance.bbox.length === 2 ? bounds(instance.bbox) : area;
@@ -54,20 +56,31 @@ export function buildScene(snapshot: Snapshot): Scene {
       groups[side].push(terminal);
     }
     const ports: Port[] = [];
-    for (const [side, terminals] of Object.entries(groups)) {
-      const vertical = side === "left" || side === "right";
-      const axis = vertical ? 1 : 0;
-      terminals.sort((a, b) => (a.xy?.[axis] ?? 0) - (b.xy?.[axis] ?? 0));
-      terminals.forEach((terminal, index) => {
-        const offset = ((2 * index + 1) / terminals.length - 1) * 0.88;
-        const position: Point = vertical
-          ? [x + halfWidth * (side === "left" ? -1 : 1), y + halfHeight * offset]
-          : [x + halfWidth * offset, y + halfHeight * (side === "top" ? 1 : -1)];
-        ports.push({ ...terminal, instance: instance.name, side, position });
-      });
+    if (resolved.symbol) {
+      for (const terminal of instance.terminals) {
+        const anchors = resolved.pinAnchors.get(terminal.name) ?? [];
+        anchors.forEach((position, anchorIndex) => ports.push({ ...terminal, instance: instance.name, side: "symbol", position, anchorIndex }));
+      }
+    } else {
+      for (const [side, terminals] of Object.entries(groups)) {
+        const vertical = side === "left" || side === "right";
+        const axis = vertical ? 1 : 0;
+        terminals.sort((a, b) => (a.xy?.[axis] ?? 0) - (b.xy?.[axis] ?? 0));
+        terminals.forEach((terminal, index) => {
+          const offset = ((2 * index + 1) / terminals.length - 1) * 0.88;
+          const position: Point = vertical
+            ? [x + halfWidth * (side === "left" ? -1 : 1), y + halfHeight * offset]
+            : [x + halfWidth * offset, y + halfHeight * (side === "top" ? 1 : -1)];
+          ports.push({ ...terminal, instance: instance.name, side, position, anchorIndex: 0 });
+        });
+      }
     }
-    devices.push({ instance, x, y, halfWidth, halfHeight, ports });
-    extentPoints.push([x - halfWidth, y - halfHeight], [x + halfWidth, y + halfHeight]);
+    const symbolPoints = resolved.symbol ? symbolWorldPoints(resolved.symbol, instance) : [];
+    const fallbackBounds = { left: x - halfWidth, right: x + halfWidth, top: y + halfHeight, bottom: y - halfHeight };
+    const hitBounds = symbolPoints.length ? bounds(symbolPoints) : fallbackBounds;
+    devices.push({ instance, x, y, halfWidth, halfHeight, ports, hitBounds });
+    extentPoints.push([hitBounds.left, hitBounds.bottom], [hitBounds.right, hitBounds.top]);
+    if (resolved.symbol) extentPoints.push(...ports.map((port) => port.position));
   }
   return { devices, area: bounds(extentPoints.length ? extentPoints : [[-1, -1], [1, 1]]) };
 }

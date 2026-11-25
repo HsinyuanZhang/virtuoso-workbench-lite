@@ -51,3 +51,5 @@ def flip_instance(instance: dict[str, Any]) -> None:
     for terminal in instance["terminals"]:
         if terminal.get("xy") is not None:
             terminal["xy"] = mirror(terminal["xy"])
+        if terminal.get("source_pin_anchors") is not None:
+            terminal["source_pin_anchors"] = [mirror(anchor) for anchor in terminal["source_pin_anchors"]]
