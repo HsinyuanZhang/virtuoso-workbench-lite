@@ -2,6 +2,14 @@ import { orientations } from "./orientation";
 import type { Instance, LibrarySymbol, LibrarySymbolPackage, Point, SymbolPrimitive } from "./types";
 
 export const PIN_TOLERANCE = 1e-6;
+const turn = 2 * Math.PI;
+
+type Arc = Extract<SymbolPrimitive, { type: "arc" }>;
+
+function positiveAngle(angle: number): number {
+  const remainder = angle % turn;
+  return remainder < 0 ? remainder + turn : remainder;
+}
 
 export interface SymbolResolution {
   symbol: LibrarySymbol | null;
@@ -19,6 +27,34 @@ export function transformSymbolPoint(point: Point, symbol: LibrarySymbol, instan
   const x = point[0] - symbol.origin[0];
   const y = point[1] - symbol.origin[1];
   return [instance.xy[0] + matrix[0][0] * x + matrix[0][1] * y, instance.xy[1] + matrix[1][0] * x + matrix[1][1] * y];
+}
+
+export function transformSymbolArc(arc: Arc, symbol: LibrarySymbol, instance: Instance) {
+  const matrix = matrixFor(instance);
+  if (!matrix) throw new Error("Symbol arc needs a known orientation.");
+  const [[a, b], [c, d]] = matrix;
+  const [[left, bottom], [right, top]] = arc.bbox;
+  const center = transformSymbolPoint([(left + right) / 2, (bottom + top) / 2], symbol, instance);
+  const rx = (right - left) / 2;
+  const ry = (top - bottom) / 2;
+  const radii: Point = [Math.abs(a) * rx + Math.abs(b) * ry, Math.abs(c) * rx + Math.abs(d) * ry];
+  const x = Math.cos(arc.start_angle);
+  const y = Math.sin(arc.start_angle);
+  const start = Math.atan2(c * x + d * y, a * x + b * y);
+  const delta = arc.stop_angle - arc.start_angle;
+  const sweep = (a * d - b * c) * (Math.abs(delta) >= turn ? turn : positiveAngle(delta));
+  return { center, radii, start, sweep };
+}
+
+function arcBoundsPoints({ center, radii, start, sweep }: ReturnType<typeof transformSymbolArc>): Point[] {
+  const angles = [start, start + sweep];
+  for (const angle of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+    if (positiveAngle((angle - start) * Math.sign(sweep)) <= Math.abs(sweep)) angles.push(angle);
+  }
+  return angles.map((angle): Point => [
+    center[0] + radii[0] * Math.cos(angle),
+    center[1] + radii[1] * Math.sin(angle),
+  ]);
 }
 
 function fallback(reason: string): SymbolResolution {
@@ -97,7 +133,7 @@ function boxCorners(box: Point[]): Point[] {
   return [[left, bottom], [left, top], [right, bottom], [right, top]];
 }
 
-function primitivePoints(primitive: SymbolPrimitive): Point[] {
+function primitivePoints(primitive: Exclude<SymbolPrimitive, Arc>): Point[] {
   switch (primitive.type) {
     case "line":
     case "polygon":
@@ -119,7 +155,9 @@ export function visibleSymbolPrimitives(symbol: LibrarySymbol): SymbolPrimitive[
 
 export function symbolWorldPoints(symbol: LibrarySymbol, instance: Instance): Point[] {
   const primitives = visibleSymbolPrimitives(symbol);
-  const local = primitives.flatMap(primitivePoints);
-  if (!primitives.some((primitive) => primitive.type === "instance-name")) local.push(symbol.origin);
-  return local.map((point) => transformSymbolPoint(point, symbol, instance));
+  const points = primitives.flatMap((primitive) => primitive.type === "arc"
+    ? arcBoundsPoints(transformSymbolArc(primitive, symbol, instance))
+    : primitivePoints(primitive).map((point) => transformSymbolPoint(point, symbol, instance)));
+  if (!primitives.some((primitive) => primitive.type === "instance-name")) points.push(transformSymbolPoint(symbol.origin, symbol, instance));
+  return points;
 }

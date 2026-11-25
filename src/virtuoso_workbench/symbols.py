@@ -234,13 +234,17 @@ def validate_package(value: Any) -> dict[str, Any]:
                     _point(point)
                 geometry_items += len(points)
                 drawable_geometry = True
-            elif kind == "ellipse":
-                _exact_fields(
-                    primitive, {"type", "bbox", "layer", "purpose"}, {"type", "bbox", "layer", "purpose"}, "ellipse"
-                )
+            elif kind in ("ellipse", "arc"):
+                fields = {"type", "bbox", "layer", "purpose"}
+                if kind == "arc":
+                    fields.update(("start_angle", "stop_angle"))
+                _exact_fields(primitive, fields, fields, kind)
                 ellipse_bbox = _bbox(primitive.get("bbox"))
                 if ellipse_bbox[0][0] == ellipse_bbox[1][0] or ellipse_bbox[0][1] == ellipse_bbox[1][1]:
-                    raise SymbolPackageError("An ellipse needs nonzero width and height.")
+                    raise SymbolPackageError(f"A {kind} primitive needs nonzero width and height.")
+                if kind == "arc":
+                    _number(primitive.get("start_angle"))
+                    _number(primitive.get("stop_angle"))
                 geometry_items += 2
                 drawable_geometry = True
             elif kind == "label":
@@ -511,6 +515,8 @@ def _symbol_query(library: str, cell: str, view: str) -> str:
               when(kind == "rect" data=list("rect" shape~>bBox shape~>layerName shape~>purpose))
               when(kind == "polygon" data=list("polygon" shape~>points shape~>layerName shape~>purpose))
               when(kind == "ellipse" data=list("ellipse" shape~>bBox shape~>layerName shape~>purpose))
+              when(kind == "arc"
+                data=list("arc" shape~>ellipseBBox shape~>startAngle shape~>stopAngle shape~>layerName shape~>purpose))
               when(kind == "label"
                 data=list("label" shape~>theLabel shape~>xy shape~>layerName shape~>purpose shape~>labelType))
               shapes=cons(data shapes))
@@ -569,6 +575,17 @@ def _symbol_from_skill(cell: str, raw: Any) -> dict[str, Any]:
             primitives.append({"type": "polygon", "points": points, "layer": shape[2], "purpose": shape[3]})
         elif kind == "ellipse" and len(shape) == 4:
             primitives.append({"type": "ellipse", "bbox": shape[1], "layer": shape[2], "purpose": shape[3]})
+        elif kind == "arc" and len(shape) == 6:
+            primitives.append(
+                {
+                    "type": "arc",
+                    "bbox": shape[1],
+                    "start_angle": shape[2],
+                    "stop_angle": shape[3],
+                    "layer": shape[4],
+                    "purpose": shape[5],
+                }
+            )
         elif kind == "label" and len(shape) == 6:
             text, xy, layer, purpose, label_type = shape[1:]
             if not isinstance(text, str):

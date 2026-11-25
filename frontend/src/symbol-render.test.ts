@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
 import demoData from "../../src/virtuoso_workbench/demo.json";
 import packageData from "../../fixtures/demo-symbols.json";
-import { buildScene } from "./logic";
+import { bounds, buildScene } from "./logic";
 import { flipPreview, toggleFlip } from "./orientation";
-import { PIN_TOLERANCE, resolveSymbol, symbolWorldPoints, transformSymbolPoint } from "./symbol-render";
-import type { Instance, LibrarySymbol, LibrarySymbolPackage, Point, Snapshot } from "./types";
+import { PIN_TOLERANCE, resolveSymbol, symbolWorldPoints, transformSymbolArc, transformSymbolPoint } from "./symbol-render";
+import type { Instance, LibrarySymbol, LibrarySymbolPackage, Point, Snapshot, SymbolPrimitive } from "./types";
 
 const snapshot = demoData as unknown as Snapshot;
 const symbols = packageData as unknown as LibrarySymbolPackage;
@@ -187,4 +187,48 @@ it("computes bounds from visible artwork without changing pin resolution", () =>
   const resolved = resolveSymbol(instance, [{ ...symbols, symbols: [withHiddenShapes] }]);
   expect(resolved.reason).toBe("resolved");
   expect(resolved.pinAnchors).toEqual(baseline.pinAnchors);
+});
+
+const wrappedArc: Extract<SymbolPrimitive, { type: "arc" }> = {
+  type: "arc", bbox: [[-2, -1], [4, 3]], start_angle: 7 * Math.PI / 4, stop_angle: Math.PI / 4,
+  layer: "device", purpose: "drawing",
+};
+const arcSymbol: LibrarySymbol = {
+  ...symbols.symbols[0], origin: [1, 1], primitives: [wrappedArc],
+};
+const arcInstance: Instance = { ...snapshot.instances[0], xy: [0, 0], bbox: [[-3, -2], [3, 2]], orientation: "R0" };
+
+it.each([
+  ["R0", 1], ["R90", 1], ["R180", 1], ["R270", 1],
+  ["MX", -1], ["MY", -1], ["MXR90", -1], ["MYR90", -1],
+] as const)("transforms a wrapped elliptical arc in %s", (orientation, sweepSign) => {
+  const instance = { ...arcInstance, orientation };
+  const { center, radii, start, sweep } = transformSymbolArc(wrappedArc, arcSymbol, instance);
+  expect(sweep).toBeCloseTo(sweepSign * Math.PI / 2);
+  const diagonal = Math.SQRT1_2;
+  const angles = [start, start + sweep / 2, start + sweep];
+  const local: Point[] = [[1 + 3 * diagonal, 1 - 2 * diagonal], [4, 1], [1 + 3 * diagonal, 1 + 2 * diagonal]];
+  const expected = local.map((point) => transformSymbolPoint(point, arcSymbol, instance));
+  angles.forEach((angle, i) => {
+    expect(center[0] + radii[0] * Math.cos(angle)).toBeCloseTo(expected[i][0]);
+    expect(center[1] + radii[1] * Math.sin(angle)).toBeCloseTo(expected[i][1]);
+  });
+  const actualBounds = bounds(symbolWorldPoints(arcSymbol, instance));
+  const expectedBounds = bounds([...expected, [0, 0]]);
+  expect(actualBounds.left).toBeCloseTo(expectedBounds.left);
+  expect(actualBounds.right).toBeCloseTo(expectedBounds.right);
+  expect(actualBounds.top).toBeCloseTo(expectedBounds.top);
+  expect(actualBounds.bottom).toBeCloseTo(expectedBounds.bottom);
+});
+
+it("reverses arc sweep and mirrors tight bounds in a horizontal flip preview", () => {
+  const source = { ...snapshot, instances: [arcInstance] };
+  const flipped = flipPreview(source, toggleFlip([], source, arcInstance.name)).instances[0];
+  expect(transformSymbolArc(wrappedArc, arcSymbol, flipped).sweep).toBeCloseTo(-Math.PI / 2);
+  const before = bounds(symbolWorldPoints(arcSymbol, arcInstance));
+  const after = bounds(symbolWorldPoints(arcSymbol, flipped));
+  expect(after.left).toBeCloseTo(-before.right);
+  expect(after.right).toBeCloseTo(-before.left);
+  expect(after.top).toBeCloseTo(before.top);
+  expect(after.bottom).toBeCloseTo(before.bottom);
 });

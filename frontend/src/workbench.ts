@@ -8,7 +8,7 @@ import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
 import type { Finding } from "./checks";
 import { flipPreview, toggleFlip } from "./orientation";
-import { resolveSymbol, transformSymbolPoint, visibleSymbolPrimitives } from "./symbol-render";
+import { resolveSymbol, transformSymbolArc, transformSymbolPoint, visibleSymbolPrimitives } from "./symbol-render";
 
 interface Elements {
   "flip-horizontal": HTMLButtonElement;
@@ -253,6 +253,14 @@ function draw() {
           const path = primitive.points.map((point) => screen(transformSymbolPoint(point, resolvedSymbol, instance)));
           if (primitive.type === "polygon" && path.length) path.push(path[0]);
           line(path, artwork, 1.4);
+        } else if (primitive.type === "arc") {
+          const { center, radii, start, sweep } = transformSymbolArc(primitive, resolvedSymbol, instance);
+          const [x, y] = screen(center);
+          context.strokeStyle = artwork;
+          context.lineWidth = 1.4;
+          context.beginPath();
+          context.ellipse(x, y, radii[0] * state.view.scale, radii[1] * state.view.scale, 0, -start, -(start + sweep), sweep > 0);
+          context.stroke();
         } else if (primitive.type === "rect" || primitive.type === "ellipse") {
           const [[left, bottom], [right, top]] = primitive.bbox;
           const corners: Point[] = [[left, bottom], [left, top], [right, bottom], [right, top]];

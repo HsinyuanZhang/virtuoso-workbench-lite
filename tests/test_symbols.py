@@ -180,6 +180,24 @@ def test_unverified_shapes_are_explicitly_incomplete():
     assert exported["diagnostics"] == ["unsupported-shape:arc"]
 
 
+def test_export_arc_preserves_ellipse_box_angles_and_package_schema():
+    bbox = [[-2, -1], [4, 3]]
+    raw = ["OK", bbox, [0, 0], [["arc", bbox, 5.4, 0.7, "device", "drawing"]], [], 0]
+    exported = _symbol_from_skill("capacitor", raw)
+    package = build_package("generic", IDENTITY, [exported])
+    schema = json.loads(
+        (Path(symbol_module.__file__).parent / "schemas" / "library-symbols-v1.json").read_text(encoding="utf-8")
+    )
+    jsonschema.Draft202012Validator(schema).validate(package)
+    assert exported["complete"] is True
+    assert exported["primitives"] == [
+        {"type": "arc", "bbox": bbox, "start_angle": 5.4, "stop_angle": 0.7, "layer": "device", "purpose": "drawing"}
+    ]
+    assert "shape~>ellipseBBox shape~>startAngle shape~>stopAngle" in symbol_module._symbol_query(
+        "generic", "capacitor", "symbol"
+    )
+
+
 def test_dynamic_label_warning_keeps_supported_body_and_static_parentheses():
     raw = [
         "OK",

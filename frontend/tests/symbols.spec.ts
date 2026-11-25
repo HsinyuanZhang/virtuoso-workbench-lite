@@ -121,6 +121,35 @@ test("resolved artwork is selectable, flip preview stays aligned, and draft topo
   await expect(page.locator("#endpoints")).not.toContainText("MP1.G");
 });
 
+test("the canvas reverses a symbol arc when the instance is flipped", async ({ page }) => {
+  const arc: SymbolPrimitive = {
+    type: "arc", bbox: [[-1, -2], [1, 2]], start_angle: 0, stop_angle: Math.PI / 2, layer: "device", purpose: "drawing",
+  };
+  const withArc = { ...symbols, symbols: symbols.symbols.map((symbol) => symbol.cell === "pmos"
+    ? { ...symbol, primitives: [...symbol.primitives, arc] }
+    : symbol) };
+  await page.addInitScript(() => {
+    const ellipse = CanvasRenderingContext2D.prototype.ellipse;
+    CanvasRenderingContext2D.prototype.ellipse = function (this: CanvasRenderingContext2D, ...args: Parameters<typeof ellipse>) {
+      const [, , , , , start, end, counterclockwise] = args;
+      if (Math.abs(end - start) < 2 * Math.PI) {
+        const direction = counterclockwise ? -1 : 1;
+        const canvas = this.canvas;
+        canvas.dataset.arcDirections = (canvas.dataset.arcDirections ?? "") + (Math.sign(end - start) === direction ? (counterclockwise ? "L" : "R") : "!");
+      }
+      ellipse.apply(this, args);
+    };
+  });
+  await page.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [withArc] } }));
+  await page.goto("/");
+  await expect(page.locator("#symbol-status")).toContainText("resolved");
+  const canvas = page.locator("canvas");
+  await expect(canvas).toHaveAttribute("data-arc-directions", /^L+$/);
+  await canvas.evaluate((element) => { delete (element as HTMLCanvasElement).dataset.arcDirections; });
+  await page.getByRole("button", { name: "Flip left-right", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-arc-directions", /^[LR]*R[LR]*$/);
+});
+
 test("visible wires stay selectable inside resolved symbols but not fallback rectangles", async ({ page }) => {
   await page.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [symbols] } }));
   await routeDemoWithSymbolWire(page);

@@ -77,6 +77,11 @@
         },
         {
           "type": "object", "additionalProperties": false,
+          "required": ["type", "bbox", "start_angle", "stop_angle", "layer", "purpose"],
+          "properties": {"type": {"const": "arc"}, "bbox": {"$ref": "#/$defs/bbox"}, "start_angle": {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000}, "stop_angle": {"type": "number", "minimum": -1000000000000, "maximum": 1000000000000}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
           "required": ["type", "text", "xy", "layer", "purpose"],
           "properties": {"type": {"const": "label"}, "text": {"type": "string", "maxLength": 4096}, "xy": {"$ref": "#/$defs/point"}, "layer": {"type": "string", "maxLength": 128}, "purpose": {"type": "string", "maxLength": 128}}
         },

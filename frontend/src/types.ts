@@ -14,6 +14,7 @@ export interface Snapshot {
 export type SymbolPrimitive =
   | { type: "line" | "polygon"; points: Point[]; layer: string; purpose: string }
   | { type: "rect" | "ellipse"; bbox: Point[]; layer: string; purpose: string }
+  | { type: "arc"; bbox: Point[]; start_angle: number; stop_angle: number; layer: string; purpose: string }
   | { type: "label"; text: string; xy: Point; layer: string; purpose: string }
   | { type: "instance-name"; xy: Point; layer: string; purpose: string }
   | { type: "unsupported"; source_type: string; layer?: string; purpose?: string };
