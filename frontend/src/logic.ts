@@ -80,6 +80,7 @@ export function buildScene(snapshot: Snapshot, symbolPackages: LibrarySymbolPack
     const hitBounds = symbolPoints.length ? bounds(symbolPoints) : fallbackBounds;
     devices.push({ instance, x, y, halfWidth, halfHeight, ports, hitBounds });
     extentPoints.push([hitBounds.left, hitBounds.bottom], [hitBounds.right, hitBounds.top]);
+    if (resolved.symbol) extentPoints.push(...ports.map((port) => port.position));
   }
   return { devices, area: bounds(extentPoints.length ? extentPoints : [[-1, -1], [1, 1]]) };
 }

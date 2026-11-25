@@ -511,7 +511,8 @@ def _symbol_query(library: str, cell: str, view: str) -> str:
               when(kind == "rect" data=list("rect" shape~>bBox shape~>layerName shape~>purpose))
               when(kind == "polygon" data=list("polygon" shape~>points shape~>layerName shape~>purpose))
               when(kind == "ellipse" data=list("ellipse" shape~>bBox shape~>layerName shape~>purpose))
-              when(kind == "label" data=list("label" shape~>theLabel shape~>xy shape~>layerName shape~>purpose))
+              when(kind == "label"
+                data=list("label" shape~>theLabel shape~>xy shape~>layerName shape~>purpose shape~>labelType))
               shapes=cons(data shapes))
             terminals=nil
             foreach(term cv~>terminals
@@ -568,14 +569,19 @@ def _symbol_from_skill(cell: str, raw: Any) -> dict[str, Any]:
             primitives.append({"type": "polygon", "points": points, "layer": shape[2], "purpose": shape[3]})
         elif kind == "ellipse" and len(shape) == 4:
             primitives.append({"type": "ellipse", "bbox": shape[1], "layer": shape[2], "purpose": shape[3]})
-        elif kind == "label" and len(shape) == 5:
-            text, xy, layer, purpose = shape[1:]
+        elif kind == "label" and len(shape) == 6:
+            text, xy, layer, purpose, label_type = shape[1:]
             if not isinstance(text, str):
                 diagnostics.append("unsupported-dynamic-label")
                 continue
-            if text.strip() == "cdsName()":
+            instance_name = (
+                bool(re.fullmatch(r"\[\s*@instanceName\s*\]", text.strip()))
+                if label_type == "NLPLabel"
+                else text.strip() == "cdsName()"
+            )
+            if instance_name:
                 primitives.append({"type": "instance-name", "xy": xy, "layer": layer, "purpose": purpose})
-            elif re.search(r"\b(?:cds[A-Za-z0-9_]*|[ip]Par)\s*\(", text):
+            elif label_type in ("NLPLabel", "ILLabel") or re.search(r"\b(?:cds[A-Za-z0-9_]*|[ip]Par)\s*\(", text):
                 diagnostics.append("unsupported-dynamic-label")
             else:
                 primitives.append({"type": "label", "text": text, "xy": xy, "layer": layer, "purpose": purpose})

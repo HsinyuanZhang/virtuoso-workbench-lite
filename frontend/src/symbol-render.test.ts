@@ -166,11 +166,25 @@ it("keeps dynamic-label warnings cosmetic and applies the OA tolerance", () => {
   expect(resolveSymbol(instance, [{ ...symbols, symbols: [shifted(PIN_TOLERANCE * 1.1)] }]).reason).toContain("pin anchor mismatch");
 });
 
-it("computes bounds from transformed artwork and pin geometry", () => {
+it("computes bounds from visible artwork without changing pin resolution", () => {
   const instance = required(snapshot.instances.find((item) => item.name === "MN1"), "NMOS instance");
   const symbol = required(symbols.symbols.find((entry) => entry.cell === "nmos"), "NMOS symbol");
   const points = symbolWorldPoints(symbol, instance);
-  expect(Math.min(...points.map(([x]) => x))).toBe(-5.8);
-  expect(Math.max(...points.map(([x]) => x))).toBe(-2.2);
-  expect(Math.max(...points.map(([, y]) => y))).toBe(1.1);
+  expect(Math.min(...points.map(([x]) => x))).toBe(-5.7);
+  expect(Math.max(...points.map(([x]) => x))).toBe(-2.3);
+  expect(Math.max(...points.map(([, y]) => y))).toBe(1);
+  const withHiddenShapes: LibrarySymbol = {
+    ...symbol,
+    bbox: [[-99, -99], [99, 99]],
+    primitives: [
+      ...symbol.primitives,
+      { type: "rect", layer: "instance", purpose: "custom", bbox: [[20, 20], [40, 40]] },
+      { type: "rect", layer: "pin", purpose: "drawing", bbox: [[-99, -99], [-20, -20]] },
+    ],
+  };
+  expect(symbolWorldPoints(withHiddenShapes, instance)).toEqual(points);
+  const baseline = resolveSymbol(instance, [symbols]);
+  const resolved = resolveSymbol(instance, [{ ...symbols, symbols: [withHiddenShapes] }]);
+  expect(resolved.reason).toBe("resolved");
+  expect(resolved.pinAnchors).toEqual(baseline.pinAnchors);
 });

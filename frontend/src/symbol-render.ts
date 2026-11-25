@@ -113,14 +113,13 @@ function primitivePoints(primitive: SymbolPrimitive): Point[] {
   }
 }
 
+export function visibleSymbolPrimitives(symbol: LibrarySymbol): SymbolPrimitive[] {
+  return symbol.primitives.filter((primitive) => primitive.layer !== "instance" && primitive.layer !== "pin");
+}
+
 export function symbolWorldPoints(symbol: LibrarySymbol, instance: Instance): Point[] {
-  const local = [
-    ...boxCorners(symbol.bbox),
-    ...symbol.primitives.flatMap(primitivePoints),
-    ...symbol.terminals.flatMap((terminal) => terminal.pin_figures.flatMap((figure) => [
-      ...boxCorners(figure.bbox),
-      ...figure.anchors,
-    ])),
-  ];
+  const primitives = visibleSymbolPrimitives(symbol);
+  const local = primitives.flatMap(primitivePoints);
+  if (!primitives.some((primitive) => primitive.type === "instance-name")) local.push(symbol.origin);
   return local.map((point) => transformSymbolPoint(point, symbol, instance));
 }

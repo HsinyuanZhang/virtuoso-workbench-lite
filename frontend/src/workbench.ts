@@ -8,7 +8,7 @@ import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
 import type { Finding } from "./checks";
 import { flipPreview, toggleFlip } from "./orientation";
-import { resolveSymbol, transformSymbolPoint } from "./symbol-render";
+import { resolveSymbol, transformSymbolPoint, visibleSymbolPrimitives } from "./symbol-render";
 
 interface Elements {
   "flip-horizontal": HTMLButtonElement;
@@ -248,7 +248,7 @@ function draw() {
       const connected = Boolean(state.net && ports.some((port) => port.net === state.net));
       const artwork = chosen || connected ? palette.white : palette.green;
       let hasNameTemplate = false;
-      for (const primitive of resolvedSymbol.primitives) {
+      for (const primitive of visibleSymbolPrimitives(resolvedSymbol)) {
         if (primitive.type === "line" || primitive.type === "polygon") {
           const path = primitive.points.map((point) => screen(transformSymbolPoint(point, resolvedSymbol, instance)));
           if (primitive.type === "polygon" && path.length) path.push(path[0]);

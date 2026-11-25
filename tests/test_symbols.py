@@ -187,8 +187,8 @@ def test_dynamic_label_warning_keeps_supported_body_and_static_parentheses():
         [0, 0],
         [
             ["line", [[-1, 0], [1, 0]], "drawing", "drawing"],
-            ["label", "W=(typ) ", [0, 1], "drawing", "drawing"],
-            ["label", 'W=cdsParam(\\"w\\")', [0, -1], "drawing", "drawing"],
+            ["label", "W=(typ) ", [0, 1], "drawing", "drawing", "normalLabel"],
+            ["label", 'W=cdsParam(\\"w\\")', [0, -1], "drawing", "drawing", "ILLabel"],
         ],
         [["A", "inputOutput", None]],
         0,
@@ -197,6 +197,29 @@ def test_dynamic_label_warning_keeps_supported_body_and_static_parentheses():
     assert exported["complete"] is True
     assert exported["diagnostics"] == ["unsupported-dynamic-label"]
     assert any(primitive.get("text") == "W=(typ) " for primitive in exported["primitives"])
+
+
+def test_export_classifies_nlp_labels_and_keeps_name_templates():
+    raw = [
+        "OK",
+        [[-1, -1], [1, 1]],
+        [0, 0],
+        [
+            ["label", "[@cellName]", [-1, 0], "device", "annotate", "NLPLabel"],
+            ["label", "W=[@w]", [0, -1], "device", "annotate", "NLPLabel"],
+            ["label", "[@instanceName]", [0, 1], "device", "annotate", "NLPLabel"],
+            ["label", "cdsName()", [1, 0], "annotate", "drawing", "ILLabel"],
+        ],
+        [["A", "inputOutput", None]],
+        0,
+    ]
+    exported = _symbol_from_skill("nmos", raw)
+    assert exported["complete"] is True
+    assert exported["diagnostics"] == ["unsupported-dynamic-label"]
+    assert [(primitive["type"], primitive["xy"]) for primitive in exported["primitives"]] == [
+        ("instance-name", [0, 1]),
+        ("instance-name", [1, 0]),
+    ]
 
 
 def test_nil_symbol_lists_are_incomplete_not_type_errors():
@@ -284,7 +307,7 @@ class FakeBridge:
         if "missingCell" in query:
             return Result('("MISSING")')
         return Result(
-            '("OK" ((-1 -1) (1 1)) (0 0) (("line" ((0 0) (1 0)) "drawing" "drawing") ("polygon" ((0 0) (1 0) (0 1)) "drawing" "drawing") ("ellipse" ((-0.5 -0.5) (0.5 0.5)) "drawing" "drawing") ("label" "R | \\"x\\"\\nnext" (0 0) "drawing" "drawing")) (("A" "inputOutput" (((-1 -1) (-1 1)) ((-0.75 -1) (-0.75 1))))) 0)'
+            '("OK" ((-1 -1) (1 1)) (0 0) (("line" ((0 0) (1 0)) "drawing" "drawing") ("polygon" ((0 0) (1 0) (0 1)) "drawing" "drawing") ("ellipse" ((-0.5 -0.5) (0.5 0.5)) "drawing" "drawing") ("label" "R | \\"x\\"\\nnext" (0 0) "drawing" "drawing" "normalLabel")) (("A" "inputOutput" (((-1 -1) (-1 1)) ((-0.75 -1) (-0.75 1))))) 0)'
         )
 
 
@@ -358,8 +381,8 @@ def test_export_decodes_wrapped_bridge_output_and_preserves_static_labels():
         [0, 0],
         [
             ["line", [[0, 0], [1, 0]], "drawing", "drawing"],
-            ["label", 'cdsParam("w")', [0, 0], "drawing", "drawing"],
-            ["label", 'width (typ) "quoted" \\path Ω', [0, 0], "drawing", "drawing"],
+            ["label", 'cdsParam("w")', [0, 0], "drawing", "drawing", "ILLabel"],
+            ["label", 'width (typ) "quoted" \\path Ω', [0, 0], "drawing", "drawing", "normalLabel"],
         ],
         [["A", "inputOutput", [[[-1, -1], [-1, 1]]]]],
         0,

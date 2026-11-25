@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import packageData from "../../fixtures/demo-symbols.json" with { type: "json" };
 import { buildScene } from "../src/logic";
 import { flipPreview, toggleFlip } from "../src/orientation";
-import type { LibrarySymbolPackage, Point, Snapshot } from "../src/types";
+import type { LibrarySymbolPackage, Point, Snapshot, SymbolPrimitive } from "../src/types";
 
 const symbols = packageData as unknown as LibrarySymbolPackage;
 
@@ -163,6 +163,27 @@ test("visible wires stay selectable inside resolved symbols but not fallback rec
   await fallbackPage.locator("canvas").click({ position: canvasPoint(point, fallbackScene.area, fallbackSize) });
   await expect(fallbackPage.locator("#topology-overview")).not.toContainText("SYMBOL_SPAN");
   await fallbackPage.close();
+});
+
+test("instance and pin rectangles do not change the painted symbol", async ({ page }) => {
+  const hidden: SymbolPrimitive[] = [
+    { type: "rect", layer: "instance", purpose: "custom", bbox: [[-60, -60], [-50, -50]] },
+    { type: "rect", layer: "pin", purpose: "drawing", bbox: [[50, 50], [60, 60]] },
+  ];
+  let served = symbols;
+  await page.route("**/api/symbols", (route) => route.fulfill({ json: { packages: [served] } }));
+  await page.goto("/");
+  await expect(page.locator("#statistics")).toContainText("Symbols: 4 resolved · 1 fallback");
+  const baseline = await fingerprint(page);
+
+  served = { ...symbols, symbols: symbols.symbols.map((symbol) => ({
+    ...symbol,
+    bbox: [[-60, -60], [60, 60]],
+    primitives: [...symbol.primitives, ...hidden],
+  })) };
+  await page.reload();
+  await expect(page.locator("#statistics")).toContainText("Symbols: 4 resolved · 1 fallback");
+  expect(await fingerprint(page)).toBe(baseline);
 });
 
 test("one immutable package serves two isolated state directories", async ({ page }) => {
