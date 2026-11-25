@@ -1,0 +1,20 @@
+{
+  "schema": "virtuoso-workbench/design-request-v1",
+  "id": "req-0123456789ab",
+  "title": "Review input pair width and orientation",
+  "status": "draft",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "created_by": "designer",
+  "target": {"source": "demo", "library": "examples", "cell": "Differential pair", "view": "schematic"},
+  "base_revision": "sha256:EXAMPLE",
+  "changes": [{"op": "set-parameters", "instance": "MN1", "parameters": {"w": "4u"}}, {"op": "flip-horizontal", "instance": "MN1", "from_orientation": "R0", "to_orientation": "MY"}],
+  "simulation": "Run a DC operating point check in a scratch copy.",
+  "acceptance": "Keep both input devices in saturation.",
+  "note": "Do not change the original cell. Keep the flipped instance bbox center fixed. Repair its wires, then run vwb check.",
+  "claim": null,
+  "plan": null,
+  "decision": null,
+  "result": null,
+  "history": [{"at": "2026-01-01T00:00:00Z", "actor": "designer", "event": "create", "from": "draft", "to": "draft", "message": ""}]
+}

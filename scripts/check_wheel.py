@@ -16,7 +16,14 @@ from zipfile import ZipFile
 def main() -> None:
     wheel = Path(sys.argv[1]).resolve()
     with ZipFile(wheel) as archive:
-        for name in ("demo.json", "static/index.html", "static/workbench.js", "static/workbench.css"):
+        for name in (
+            "demo.json",
+            "static/index.html",
+            "static/workbench.js",
+            "static/workbench.css",
+            "schemas/design-request-v1.json",
+            "agent-protocol.md",
+        ):
             assert archive.read("virtuoso_workbench/" + name), name
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -37,13 +44,22 @@ def main() -> None:
         try:
             assert process.stdout
             assert select.select([process.stdout], [], [], 10)[0], "Server startup timed out"
-            url = process.stdout.readline().strip().split()[-1]
+            url = json.loads(process.stdout.readline())["url"]
             assert url.startswith("http://127.0.0.1:")
             for path in ("/", "/workbench.js", "/workbench.css"):
                 with urlopen(url + path, timeout=10) as response:
                     assert response.status == 200 and response.read()
             with urlopen(url + "/api/demo", timeout=10) as response:
                 assert json.load(response)["source"] == "demo"
+            guide = subprocess.run(
+                [str(root / "env" / "bin" / "vwb"), "agent", "guide"],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert "Do not edit OA before approval." in json.loads(guide.stdout)["guide"]
         finally:
             process.terminate()
             process.communicate(timeout=10)

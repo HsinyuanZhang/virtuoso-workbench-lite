@@ -19,7 +19,6 @@ export interface Device {
 export interface Extent { left: number; right: number; top: number; bottom: number }
 export interface Scene { devices: Device[]; area: Extent }
 export interface Net { terminals: string[]; pins: string[]; segments: number }
-export interface Receipt { id: string; path: string }
 export type Hit =
   | { kind: "terminal"; port: Port; x: number; y: number }
   | { kind: "pin"; pin: Pin; x: number; y: number }
@@ -27,7 +26,7 @@ export type Hit =
   | { kind: "device"; instance: string; left: number; right: number; top: number; bottom: number };
 export interface State {
   snapshot: Snapshot | null; scene: Scene | null; nets: Map<string, Net>;
-  instance: string | null; net: string | null; endpoints: Port[]; receipt: Receipt | null;
+  instance: string | null; net: string | null; endpoints: Port[];
   view: { x: number; y: number; scale: number }; hits: Hit[];
   drag: { x: number; y: number; viewX: number; viewY: number; moved: boolean } | null;
   request: number;

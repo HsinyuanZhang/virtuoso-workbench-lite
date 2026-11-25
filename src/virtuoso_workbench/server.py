@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import math
 import os
 import re
 import secrets
-import subprocess
 import tempfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import parse_qs, urlsplit
+
+from .checks import check_preview, connectivity_checks
+
+if TYPE_CHECKING:
+    from .requests import RequestStore
 
 ROOT = Path(__file__).resolve().parent
 NAME = re.compile(r"[A-Za-z0-9_.$+!@-]{1,128}")
@@ -267,6 +269,15 @@ class WorkbenchServer(ThreadingHTTPServer):
     demo: dict[str, Any]
     read_live: Callable[[str, str], dict[str, Any]]
     state_dir: Path
+    read_master: Callable[[dict[str, Any]], list[str]]
+
+    def request_store(self) -> RequestStore:
+        from .requests import RequestStore
+
+        def snapshot(target: dict[str, Any]) -> dict[str, Any]:
+            return self.demo if target["source"] == "demo" else self.read_live(target["library"], target["cell"])
+
+        return RequestStore(self.state_dir, snapshot, getattr(self, "read_master", None))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -307,6 +318,12 @@ class Handler(BaseHTTPRequestHandler):
         self.check_origin()
         target = urlsplit(self.path)
         if self.command == "GET":
+            if target.path == "/api/requests":
+                return self.send_json({"ok": True, "requests": self.server.request_store().list()})
+            if re.fullmatch(r"/api/requests/[^/]+", target.path):
+                return self.send_json(
+                    {"ok": True, "request": self.server.request_store().show(target.path.rsplit("/", 1)[1])}
+                )
             if target.path in self.STATIC:
                 filename, content_type = self.STATIC[target.path]
                 return self.send(HTTPStatus.OK, (ROOT / "static" / filename).read_bytes(), content_type)
@@ -317,21 +334,58 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot = self.server.read_live(query.get("library", [""])[0], query.get("cell", [""])[0])
             else:
                 raise WorkbenchError("Page not found.", HTTPStatus.NOT_FOUND)
-            return self.send_json({**snapshot, "revision": revision(snapshot)})
-        if target.path != "/api/handoffs":
+            return self.send_json({**snapshot, "revision": revision(snapshot), "checks": connectivity_checks(snapshot)})
+        action = re.fullmatch(r"/api/requests/([^/]+)/(submit|cancel|approve|revise|reject|accept)", target.path)
+        if target.path not in ("/api/requests", "/api/check") and not action:
             raise WorkbenchError("Page not found.", HTTPStatus.NOT_FOUND)
-        if self.headers.get_content_type() != "application/json":
-            raise WorkbenchError("Send a JSON request.")
-        length = int(self.headers.get("Content-Length", "0"))
-        if not 0 < length <= 8192:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            raise WorkbenchError("Invalid content length.") from None
+        if not (0 if action else 1) <= length <= (8192 if action else 65536):
             raise WorkbenchError("Request size is outside the supported range.")
-        payload = json.loads(self.rfile.read(length))
-        saved = save_plan(payload, self.server.demo, self.server.read_live, self.server.state_dir)
-        return self.send_json(saved, HTTPStatus.CREATED)
+        if length and self.headers.get_content_type() != "application/json":
+            raise WorkbenchError("Send a JSON request.")
+        payload = json.loads(self.rfile.read(length)) if length else {}
+        store = self.server.request_store()
+        if target.path == "/api/check":
+            from .requests import RequestError, name, obj
+
+            obj(payload, ("target", "revision", "changes"))
+            checked_target = obj(payload["target"], ("source", "library", "cell", "view"))
+            if checked_target["source"] not in ("demo", "virtuoso"):
+                raise RequestError("Unknown schematic source.")
+            if checked_target["source"] == "virtuoso":
+                for field in ("library", "cell", "view"):
+                    name(checked_target[field])
+            return self.send_json(check_preview(payload, store.snapshot_reader(checked_target)))
+        if action:
+            from .requests import RequestError, obj
+
+            obj(payload, (), ("comment", "reviewed_event") if action[2] in ("approve", "accept") else ("comment",))
+            reviewed_event = payload.get("reviewed_event", -1)
+            if type(reviewed_event) is not int:
+                raise RequestError("The reviewed event must be an integer.")
+            return self.send_json(
+                {
+                    "ok": True,
+                    "request": store.human(
+                        action[1], action[2], payload.get("comment", ""), reviewed_event=reviewed_event
+                    ),
+                }
+            )
+        return self.send_json({"ok": True, "request": store.create(payload)}, HTTPStatus.CREATED)
 
     def dispatch(self) -> None:
+        from .requests import RequestError
+
         try:
             self.route()
+        except RequestError as error:
+            status = {3: HTTPStatus.NOT_FOUND, 4: HTTPStatus.CONFLICT, 6: HTTPStatus.CONFLICT}.get(
+                error.exit_code, HTTPStatus.BAD_REQUEST
+            )
+            self.send_json({"ok": False, "error": {"code": error.code, "message": str(error)}}, status)
         except WorkbenchError as error:
             self.send_json({"error": str(error)}, error.status)
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -345,66 +399,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8765)
-    endpoint = parser.add_mutually_exclusive_group()
-    endpoint.add_argument("--bridge-host")
-    endpoint.add_argument("--bridge-docker", metavar="CONTAINER")
-    parser.add_argument("--bridge-port", type=int, default=65432)
-    parser.add_argument("--state-dir", type=Path, default=Path.cwd() / ".workbench" / "handoffs")
-    parser.add_argument(
-        "--review", type=Path, metavar="HANDOFF", help="Review a saved handoff against the current snapshot"
-    )
-    arguments = parser.parse_args()
-    host = arguments.bridge_host
-    if arguments.bridge_docker:
-        inspected = subprocess.check_output(
-            [
-                "docker",
-                "inspect",
-                "--type",
-                "container",
-                "--format",
-                "{{json .NetworkSettings.Networks}}",
-                arguments.bridge_docker,
-            ],
-            text=True,
-            timeout=10,
-        )
-        addresses = sorted({network["IPAddress"] for network in json.loads(inspected).values() if network["IPAddress"]})
-        if len(addresses) != 1:
-            parser.error("The container must have one IPv4 address, or supply --bridge-host.")
-        host = addresses[0]
-    demo = json.loads((ROOT / "demo.json").read_text(encoding="utf-8"))
-    bridge_lock = Lock()
+    from .cli import main as run
 
-    def read_live(library: str, cell: str) -> dict[str, Any]:
-        with bridge_lock:
-            return read_snapshot(library, cell, host, arguments.bridge_port)
-
-    if arguments.review:
-        try:
-            plan = json.loads(arguments.review.read_text(encoding="utf-8"))
-            if plan["schema"] != PLAN_SCHEMA:
-                raise WorkbenchError("Unsupported handoff schema.")
-            target = plan["target"]
-            if target["source"] not in ("demo", "virtuoso"):
-                raise WorkbenchError("Unsupported schematic source.")
-            snapshot = demo if target["source"] == "demo" else read_live(target["library"], target["cell"])
-            if plan["base_revision"] != revision(snapshot):
-                raise WorkbenchError("The schematic changed. Make a new handoff from the latest cell.")
-            operation = review_wire(snapshot, plan["operation"]["endpoints"])
-            print(json.dumps({"target": target, "operation": operation, "note": plan["note"]}, indent=2))
-        except (KeyError, TypeError, OSError, RuntimeError, ValueError) as error:
-            parser.exit(1, f"Could not review handoff: {error}\n")
-        return
-
-    with WorkbenchServer(("127.0.0.1", arguments.port), Handler) as server:
-        server.demo = demo
-        server.read_live = read_live
-        server.state_dir = arguments.state_dir.resolve()
-        print(f"Circuit Workbench at http://127.0.0.1:{server.server_port}", flush=True)
-        server.serve_forever()
+    run()
 
 
 if __name__ == "__main__":

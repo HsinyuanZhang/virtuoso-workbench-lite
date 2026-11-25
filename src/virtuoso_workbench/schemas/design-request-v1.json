@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/virtuoso-workbench/design-request-v1",
+  "title": "Virtuoso Workbench design request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "title", "status", "created_at", "updated_at", "created_by", "target", "base_revision", "changes", "simulation", "acceptance", "note", "claim", "plan", "decision", "result", "history"],
+  "properties": {
+    "schema": {"const": "virtuoso-workbench/design-request-v1"},
+    "id": {"type": "string", "pattern": "^req-[0-9a-f]{12}$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "status": {"enum": ["draft", "submitted", "claimed", "planned", "approved", "executing", "result-pending", "completed", "rejected", "cancelled", "failed"]},
+    "created_at": {"$ref": "#/$defs/time"},
+    "updated_at": {"$ref": "#/$defs/time"},
+    "created_by": {"$ref": "#/$defs/identity"},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source", "library", "cell", "view"],
+      "properties": {
+        "source": {"enum": ["demo", "virtuoso"]},
+        "library": {"$ref": "#/$defs/identity"}, "cell": {"$ref": "#/$defs/identity"}, "view": {"$ref": "#/$defs/name"}
+      }
+    },
+    "base_revision": {"type": "string", "minLength": 1, "maxLength": 128},
+    "changes": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"$ref": "#/$defs/change"}},
+    "simulation": {"type": "string", "maxLength": 4000},
+    "acceptance": {"type": "string", "maxLength": 4000},
+    "note": {"type": "string", "maxLength": 2000},
+    "claim": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/claim"}]},
+    "plan": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/plan"}]},
+    "decision": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/decision"}]},
+    "result": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/result"}]},
+    "history": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/history"}}
+  },
+  "$defs": {
+    "name": {"type": "string", "pattern": "^[A-Za-z0-9_.$+!@-]{1,128}$"},
+    "identity": {"type": "string", "minLength": 1, "maxLength": 128},
+    "time": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "parameters": {"type": "object", "maxProperties": 64, "propertyNames": {"$ref": "#/$defs/name"}, "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 64}},
+    "terminal_name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.$+!@-]+(?:<[0-9]+(?::[0-9]+)?>)?$"},
+    "endpoint": {"type": "object", "additionalProperties": false, "required": ["instance", "terminal"], "properties": {"instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/terminal_name"}}},
+    "change": {"oneOf": [
+      {"type": "object", "additionalProperties": false, "required": ["op", "endpoints", "outcome", "affected_nets", "affected_top_level_pins"], "properties": {
+        "op": {"const": "connect"}, "endpoints": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/endpoint"}},
+        "net": {"$ref": "#/$defs/name"},
+        "outcome": {"enum": ["already-connected", "merge-existing-nets", "attach-to-existing-net", "create-net"]},
+        "affected_nets": {"type": "array", "items": {"type": "string"}},
+        "affected_top_level_pins": {"type": "array", "items": {"type": "string"}}
+      }},
+      {"type": "object", "additionalProperties": false, "required": ["op", "instance", "from_orientation", "to_orientation"], "properties": {"op": {"const": "flip-horizontal"}, "instance": {"$ref": "#/$defs/name"}, "from_orientation": {"enum": ["R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"]}, "to_orientation": {"enum": ["R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"]}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "instance", "terminal"], "properties": {"op": {"const": "disconnect"}, "instance": {"$ref": "#/$defs/name"}, "terminal": {"$ref": "#/$defs/terminal_name"}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "name", "library", "cell", "view", "parameters"], "properties": {"op": {"const": "add-instance"}, "name": {"$ref": "#/$defs/name"}, "library": {"$ref": "#/$defs/name"}, "cell": {"$ref": "#/$defs/name"}, "view": {"$ref": "#/$defs/name", "default": "symbol"}, "parameters": {"$ref": "#/$defs/parameters"}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "name"], "properties": {"op": {"const": "remove-instance"}, "name": {"$ref": "#/$defs/name"}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "instance", "parameters"], "properties": {"op": {"const": "set-parameters"}, "instance": {"$ref": "#/$defs/name"}, "parameters": {"$ref": "#/$defs/parameters"}}},
+      {"type": "object", "additionalProperties": false, "required": ["op", "name", "direction", "net"], "properties": {"op": {"const": "add-pin"}, "name": {"$ref": "#/$defs/name"}, "direction": {"enum": ["input", "output", "inputOutput"]}, "net": {"$ref": "#/$defs/name"}}}
+    ]},
+    "claim": {"type": "object", "additionalProperties": false, "required": ["agent", "harness", "claimed_at", "lease_expires_at", "token"], "properties": {"agent": {"$ref": "#/$defs/identity"}, "harness": {"$ref": "#/$defs/identity"}, "claimed_at": {"$ref": "#/$defs/time"}, "lease_expires_at": {"$ref": "#/$defs/time"}, "token": {"type": "string", "pattern": "^[0-9a-f]{48}$"}}},
+    "plan": {"type": "object", "additionalProperties": false, "required": ["agent", "submitted_at", "summary", "steps"], "properties": {"agent": {"$ref": "#/$defs/identity"}, "submitted_at": {"$ref": "#/$defs/time"}, "summary": {"type": "string", "minLength": 1, "maxLength": 4000}, "steps": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 4000}}, "risks": {"type": "string", "maxLength": 4000}}},
+    "decision": {"type": "object", "additionalProperties": false, "required": ["action", "by", "at", "comment"], "properties": {"action": {"enum": ["approve", "revise", "reject"]}, "by": {"$ref": "#/$defs/identity"}, "at": {"$ref": "#/$defs/time"}, "comment": {"type": "string", "maxLength": 2000}}},
+    "metric": {"type": "object", "additionalProperties": false, "required": ["name", "value"], "properties": {"name": {"$ref": "#/$defs/identity"}, "value": {"type": "string", "minLength": 1, "maxLength": 4000}, "unit": {"type": "string", "maxLength": 4000}, "target": {"type": "string", "maxLength": 4000}, "met": {"type": "boolean"}}},
+    "result": {"type": "object", "additionalProperties": false, "required": ["agent", "submitted_at", "outcome", "summary", "metrics"], "properties": {"agent": {"$ref": "#/$defs/identity"}, "submitted_at": {"$ref": "#/$defs/time"}, "outcome": {"enum": ["met", "not-met", "partial", "error"]}, "summary": {"type": "string", "minLength": 1, "maxLength": 8000}, "metrics": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/metric"}}, "artifacts": {"type": "array", "default": [], "maxItems": 200, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}, "final_revision": {"type": "string", "minLength": 1, "maxLength": 128}}},
+    "history": {"type": "object", "additionalProperties": false, "required": ["at", "actor", "event", "from", "to", "message"], "properties": {"at": {"$ref": "#/$defs/time"}, "actor": {"$ref": "#/$defs/identity"}, "event": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "message": {"type": "string"}}}
+  }
+}

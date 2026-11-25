@@ -11,7 +11,7 @@ backend or browser tests. Run every check listed in CONTRIBUTING.md.
 - Keep TypeScript strict. Do not suppress errors with `any`, disabled checks,
   or ignored diagnostics. Extract pure logic for unit tests.
 - Preserve CLI flags, localhost binding, Host/origin validation, request limits,
-  revision checks, atomic handoff writes, and handoff schema compatibility.
+  revision checks, atomic request writes, and design-request schema compatibility.
 - Test with synthetic data and fake Bridge clients. Never require Cadence,
   production snapshots, credentials, license configuration, or foundry files.
 - Do not commit build output, runtime state, environments, or secrets. Run the
@@ -19,5 +19,7 @@ backend or browser tests. Run every check listed in CONTRIBUTING.md.
 - Build the frontend before the wheel; verify installed-wheel operation without Node.
 - Make focused commits. Do not change Git identity or push unless authorized.
 
-This step is structure, tooling, and tests only. OA editing, agent execution,
-simulation orchestration, and result streaming require separate feature work.
+The tool tracks design requests, claims, approval, and results. Agents perform
+OA edits through the Bridge outside this tool. Do not add automatic OA editing
+or simulation execution to the request service. Read docs/agent-protocol.md.
+Keep its packaged copy identical. Do not change the frontend during Part A.
