@@ -203,6 +203,9 @@ Snapshot GET endpoints are unchanged. New routes are:
 - `POST /api/requests`: the create payload above; maximum 65536 bytes.
 - `POST /api/requests/<id>/<action>`: submit, cancel, approve, revise, reject,
   or accept; optional JSON `comment`, maximum 2000 characters and 8192 bytes.
+  For approve or accept, send `reviewed_event`: the zero-based index in the
+  displayed request history of the latest `plan` or `result` event, respectively.
+  If it no longer matches, the server returns 409 without recording a decision.
 
 Send `Content-Type: application/json` and the same-origin `Origin` header for
 JSON POST requests. A stale revision returns 409. State conflicts also return

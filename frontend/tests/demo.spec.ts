@@ -184,6 +184,56 @@ test("unapplied parameter rows survive connect edits for the same instance", asy
   await screenshot(page, info, "parameter-input-preserved.png");
 });
 
+test("discarded parameter rows reset on reopen, remove, and save", async ({ page }) => {
+  await page.goto("/");
+  const names = page.getByRole("textbox", { name: "Parameter name", exact: true });
+  const values = page.getByRole("textbox", { name: "Parameter value", exact: true });
+  const apply = page.getByRole("button", { name: "Add parameters", exact: true });
+  const fill = async () => {
+    await names.fill("width");
+    await values.fill("2u");
+  };
+  const blank = async () => {
+    await expect(names).toHaveValue("");
+    await expect(values).toHaveValue("");
+  };
+
+  await fill();
+  const opened = page.waitForResponse((reply) => reply.url().endsWith("/api/demo"));
+  await page.locator("#open-demo").click();
+  await opened;
+  await blank();
+
+  await fill();
+  await apply.click();
+  await page.getByRole("button", { name: "Remove change 1", exact: true }).click();
+  await blank();
+
+  await fill();
+  await apply.click();
+  await page.getByLabel("Title", { exact: true }).fill("Store parameter edit");
+  await save(page, false);
+  await expect(page.locator("#draft-changes > li")).toHaveCount(0);
+  await blank();
+});
+
+test("a later connection warns about nets assigned by the draft", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#instances").selectOption("MN3");
+  const terminal = (label: RegExp) => page.locator("#terminal-list button").filter({ hasText: label });
+  await terminal(/^B/).click();
+  await terminal(/^SVSS$/).click();
+  await expect(page.locator("#wire-effect")).toHaveText("Attaches the open terminal to VSS.");
+  await page.getByRole("button", { name: "Add connect", exact: true }).click();
+
+  await terminal(/^B/).click();
+  await terminal(/^GVBIAS$/).click();
+  await expect(page.locator("#wire-effect")).toContainText("Merges distinct nets VSS and VBIAS.");
+  await expect(page.locator("#endpoints")).toContainText("MN3.B · VSS");
+  await page.getByRole("button", { name: "Remove change 1", exact: true }).click();
+  await expect(page.locator("#wire-effect")).toHaveText("Attaches the open terminal to VBIAS.");
+});
+
 test("flip previews MN1 geometry, reports broken wiring, toggles back, and submits", async ({ page }, info) => {
   await page.goto("/");
   await expect(page.locator("#checks-status")).toContainText("Current snapshot · 1 finding");

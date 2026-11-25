@@ -2,7 +2,7 @@ import "./workbench.css";
 import { buildScene, collectNets, countLabel, segmentDistance } from "./logic";
 import type { Point, Port, Snapshot, State, Hit, LibrarySymbolPackage } from "./types";
 import { palette } from "./palette";
-import { appendChange, buildDraft, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
+import { appendChange, buildDraft, draftEndpointNets, parseRequest, parseResponse, sameTarget, setParameters } from "./requests";
 import type { DraftChange } from "./requests";
 import { RequestPanel, requestApi } from "./request-panel";
 import { parseFindings, previewChecks } from "./checks";
@@ -412,14 +412,17 @@ function renderDraft() {
   }
   element("flip-horizontal").disabled = !state.instance || saving;
   const endpoints = state.endpoints;
+  const endpointNets = state.snapshot ? draftEndpointNets(state.snapshot, draft, endpoints.map((port) => ({
+    instance: port.instance, terminal: port.name,
+  }))) : [];
   element("wire-status").textContent = endpoints.length === 0 ? "Select two instance terminals to draft a wire."
     : endpoints.length === 1 ? "Select the other endpoint." : "Review this proposed connection.";
-  element("endpoints").replaceChildren(...endpoints.map((port) => item("li", `${port.instance}.${port.name} · ${port.net ?? "Open"}`)));
+  element("endpoints").replaceChildren(...endpoints.map((port, index) => item("li", `${port.instance}.${port.name} · ${endpointNets[index] ?? "Open"}`)));
   const effect = element("wire-effect");
   effect.textContent = "";
   effect.classList.remove("warning");
   if (endpoints.length === 2) {
-    const [left, right] = endpoints.map((port) => port.net);
+    const [left, right] = endpointNets;
     if (left && right && left !== right) {
       effect.textContent = `Merges distinct nets ${left} and ${right}. Review both nets before routing.`;
       effect.classList.add("warning");
@@ -440,7 +443,11 @@ function renderDraft() {
     remove.type = "button";
     remove.disabled = saving;
     remove.setAttribute("aria-label", `Remove change ${index + 1}`);
-    remove.addEventListener("click", () => { draft = draft.filter((_, position) => position !== index); renderDraft(); });
+    remove.addEventListener("click", () => {
+      draft = draft.filter((_, position) => position !== index);
+      if (change.op === "set-parameters" && change.instance === state.instance) renderParameters(true);
+      renderDraft();
+    });
     entry.append(remove);
     return entry;
   }));
@@ -511,6 +518,7 @@ async function open(path: string) {
     state.net = null;
     state.endpoints = [];
     draft = [];
+    renderParameters(true);
     for (const field of ["title", "simulation", "acceptance", "note"] as const) element(field).value = "";
     element("net-search").value = "";
     element("cell-title").textContent = snapshot.cell;
@@ -622,7 +630,7 @@ async function saveDraft(submit: boolean): Promise<void> {
     if (generation === state.request) {
       draft = [];
       for (const field of ["title", "simulation", "acceptance", "note"] as const) element(field).value = "";
-      renderParameters();
+      renderParameters(true);
     }
     await requests.select(request.id);
     await requests.refresh();

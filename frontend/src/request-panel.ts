@@ -67,7 +67,7 @@ export class RequestPanel {
     const generation = ++this.generation;
     const request = parseRequest((await requestApi(`/api/requests/${encodeURIComponent(id)}`)).request);
     if (id !== this.selectedId || generation !== this.generation || this.busy) return;
-    const changed = force || this.selected?.updated_at !== request.updated_at;
+    const changed = force || this.selected?.updated_at !== request.updated_at || this.selected?.history.length !== request.history.length;
     this.selected = request;
     if (changed) this.renderDetails();
     this.changed(request);
@@ -117,7 +117,9 @@ export class RequestPanel {
         const button = node("button", action[0].toUpperCase() + action.slice(1));
         button.type = "button";
         button.dataset.action = action;
-        button.addEventListener("click", () => { void this.act(request.id, action, comment.value); });
+        const event = action === "approve" ? "plan" : action === "accept" ? "result" : undefined;
+        const reviewedEvent = event === undefined ? undefined : request.history.map((entry) => entry.event).lastIndexOf(event);
+        button.addEventListener("click", () => { void this.act(request.id, action, comment.value, reviewedEvent); });
         buttons.append(button);
       }
       this.details.append(label, comment, buttons);
@@ -155,13 +157,13 @@ export class RequestPanel {
     this.details.scrollTop = scroll;
   }
 
-  private async act(id: string, action: Action, comment: string): Promise<void> {
+  private async act(id: string, action: Action, comment: string, reviewedEvent?: number): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     ++this.generation;
     this.details.querySelectorAll("button").forEach((button) => { button.disabled = true; });
     try {
-      const request = parseRequest((await requestApi(`/api/requests/${encodeURIComponent(id)}/${action}`, { comment })).request);
+      const request = parseRequest((await requestApi(`/api/requests/${encodeURIComponent(id)}/${action}`, { comment, reviewed_event: reviewedEvent })).request);
       if (this.selectedId === id) {
         this.selected = request;
         this.renderDetails();
