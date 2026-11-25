@@ -2,6 +2,10 @@
 
 ## 0.1.0 — Unreleased
 
+### Frontend tooling
+
+- Require Node 22.13.0 or later on 22.x for frontend tooling and native bindings.
+
 ### Instance flips and neutral gray controls
 
 - Add ordered world-horizontal instance flips with fixed bbox centers.

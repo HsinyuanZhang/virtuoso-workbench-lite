@@ -1,6 +1,6 @@
 # Contributing
 
-Use Python 3.9+ and Node 22. CI checks Python 3.9 and 3.11.
+Use Python 3.9+ and Node 22.x (22.13.0 or later). CI checks Python 3.9 and 3.11.
 
 ```bash
 python3 -m venv .venv

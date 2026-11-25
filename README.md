@@ -75,7 +75,7 @@ rules, geometry limits, API, and preview behavior. This is not a full ERC or LVS
 
 ## Quick start: demo from source
 
-Use Python 3.9+ and Node 22 to build the frontend once:
+Use Python 3.9+ and Node 22.x (22.13.0 or later) to build the frontend once:
 
 ```bash
 python3 -m venv .venv

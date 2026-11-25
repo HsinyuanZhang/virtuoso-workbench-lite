@@ -1,8 +1,8 @@
 # Coding agent instructions
 
 Read README.md and CONTRIBUTING.md. Create `.venv`, install `.[dev]`, and use
-Node 22 with `npm --prefix frontend ci`. Build assets before backend or browser
-tests. Run every check listed in CONTRIBUTING.md.
+Node 22.x (22.13.0 or later) with `npm --prefix frontend ci`. Build assets before
+backend or browser tests. Run every check listed in CONTRIBUTING.md.
 
 - Work only in this repository. Do not change live EDA workspaces or stop remote
   services without explicit authorization.
