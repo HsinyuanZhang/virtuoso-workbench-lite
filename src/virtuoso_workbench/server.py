@@ -360,11 +360,19 @@ class Handler(BaseHTTPRequestHandler):
                     name(checked_target[field])
             return self.send_json(check_preview(payload, store.snapshot_reader(checked_target)))
         if action:
-            from .requests import obj
+            from .requests import RequestError, obj
 
-            obj(payload, (), ("comment",))
+            obj(payload, (), ("comment", "reviewed_event") if action[2] in ("approve", "accept") else ("comment",))
+            reviewed_event = payload.get("reviewed_event", -1)
+            if type(reviewed_event) is not int:
+                raise RequestError("The reviewed event must be an integer.")
             return self.send_json(
-                {"ok": True, "request": store.human(action[1], action[2], payload.get("comment", ""))}
+                {
+                    "ok": True,
+                    "request": store.human(
+                        action[1], action[2], payload.get("comment", ""), reviewed_event=reviewed_event
+                    ),
+                }
             )
         return self.send_json({"ok": True, "request": store.create(payload)}, HTTPStatus.CREATED)
 

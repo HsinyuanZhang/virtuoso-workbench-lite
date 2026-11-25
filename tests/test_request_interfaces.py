@@ -205,7 +205,7 @@ def test_http_plan_approval_and_result_acceptance(http_server, request_payload):
     token = store.claim(identifier, "worker", "pytest")["claim"]["token"]
     store.agent(identifier, "plan", "worker", token, {"summary": "Use scratch.", "steps": []})
     path = "/api/requests/" + identifier
-    assert request(http_server, "POST", path + "/approve", None, headers())[0] == 200
+    assert request(http_server, "POST", path + "/approve", review_body(http_server, path, "plan"), headers())[0] == 200
     store.agent(identifier, "start", "worker", token)
     assert request(http_server, "POST", path + "/cancel", "{}", headers())[0] == 409
     store.agent(
@@ -215,7 +215,51 @@ def test_http_plan_approval_and_result_acceptance(http_server, request_payload):
         token,
         {"outcome": "error", "summary": "Tool unavailable.", "metrics": [], "artifacts": []},
     )
-    assert request(http_server, "POST", path + "/accept", "{}", headers())[0] == 200
+    assert request(http_server, "POST", path + "/accept", review_body(http_server, path, "result"), headers())[0] == 200
+
+
+def review_body(http_server, path, event):
+    status, _, body = request(http_server, "GET", path)
+    assert status == 200
+    history = json.loads(body)["request"]["history"]
+    return json.dumps({"reviewed_event": max(index for index, entry in enumerate(history) if entry["event"] == event)})
+
+
+def test_http_decisions_reject_replaced_plan_and_result(http_server, request_payload):
+    store = http_server.request_store()
+    identifier = store.create({**request_payload, "submit": True})["id"]
+    token = store.claim(identifier, "worker", "pytest")["claim"]["token"]
+    path = "/api/requests/" + identifier
+
+    def decide(action, body):
+        return request(http_server, "POST", path + "/" + action, body, headers())
+
+    def submit(event, summary):
+        payload = {"summary": summary}
+        if event == "plan":
+            payload.update(steps=[])
+        else:
+            payload.update(outcome="met", metrics=[], artifacts=[])
+        store.agent(identifier, event, "worker", token, payload)
+
+    for action, event in (("approve", "plan"), ("accept", "result")):
+        if event == "result":
+            store.agent(identifier, "start", "worker", token)
+        submit(event, "Reviewed")
+        stale = review_body(http_server, path, event)
+        store.human(identifier, "revise")
+        if event == "result":
+            submit("plan", "Revised plan")
+            store.human(identifier, "approve")
+            store.agent(identifier, "start", "worker", token)
+        submit(event, "Replacement")
+        before = store.read(identifier)
+        assert decide(action, "{}")[0] == 409
+        status, _, body = decide(action, stale)
+        assert status == 409, body
+        assert event.encode() in body
+        assert store.read(identifier) == before
+        assert decide(action, review_body(http_server, path, event))[0] == 200
 
 
 def test_fake_bridge_master_lookup_and_live_cli(monkeypatch, tmp_path, demo, capsys):

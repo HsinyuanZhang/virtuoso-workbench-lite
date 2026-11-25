@@ -455,7 +455,9 @@ class RequestStore:
             )
         return sorted(summaries, key=lambda entry: (entry["created_at"], entry["id"]))
 
-    def human(self, identifier: str, action: str, comment: str = "") -> dict[str, Any]:
+    def human(
+        self, identifier: str, action: str, comment: str = "", *, reviewed_event: int | None = None
+    ) -> dict[str, Any]:
         text(comment, "Comment", 2000)
         self.identifier(identifier)
         with self.lock(identifier):
@@ -463,6 +465,18 @@ class RequestStore:
             destination = HUMAN.get(action, {}).get(request["status"])
             if not destination:
                 raise conflict("This human action is not allowed in the current state.")
+            if reviewed_event is not None and action in ("approve", "accept"):
+                kind = "plan" if action == "approve" else "result"
+                current = next(
+                    (
+                        index
+                        for index in range(len(request["history"]) - 1, -1, -1)
+                        if request["history"][index]["event"] == kind
+                    ),
+                    None,
+                )
+                if reviewed_event != current:
+                    raise conflict(f"Review the current {kind} before you {action}.")
             now = self.clock()
             if action in ("approve", "revise", "reject"):
                 request["decision"] = {
